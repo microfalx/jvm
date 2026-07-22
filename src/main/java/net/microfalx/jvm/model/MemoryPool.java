@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
+import net.microfalx.lang.NumberUtils;
 
 import java.io.Serializable;
 
@@ -26,7 +27,7 @@ public class MemoryPool implements Serializable {
     private final long timestamp = System.currentTimeMillis();
 
     public float getUsedPercent() {
-        return maximum == 0 ? 0 : 100 * (float) used / (float) maximum;
+        return NumberUtils.percent(used, maximum);
     }
 
     public long getMaximum() {

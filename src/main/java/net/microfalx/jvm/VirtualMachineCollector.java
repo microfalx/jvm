@@ -105,7 +105,7 @@ public final class VirtualMachineCollector extends AbstractCollector<VirtualMach
             runtimeInformation.setTotalSwapSpaceSize(machineMBeanServer.getLongAttr(OPERATING_SYSTEM_NAME, "TotalSwapSpaceSize", 0L));
             runtimeInformation.setProcessCpuTime(machineMBeanServer.getLongAttr(OPERATING_SYSTEM_NAME, "ProcessCpuTime", 0L));
         } catch (Exception e) {
-            LOGGER.error("Faied to extract operating system stats", e);
+            LOGGER.error("Failed to extract operating system stats", e);
         }
         virtualMachine.setRuntimeInformation(runtimeInformation);
     }

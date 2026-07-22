@@ -66,20 +66,19 @@ public class VirtualMachine implements Nameable, Descriptable, Serializable {
         for (GarbageCollection garbageCollection : garbageCollections) {
             if (garbageCollection.getType() == type) return garbageCollection;
         }
-        return new GarbageCollection(GarbageCollection.Type.UNKNOWN, 0,0);
+        return new GarbageCollection(GarbageCollection.Type.UNKNOWN, 0, 0);
     }
 
     public MemoryPool getMemoryPool(MemoryPool.Type type) {
         for (MemoryPool memoryPool : memoryPools) {
             if (memoryPool.getType() == type) return memoryPool;
         }
-        return new MemoryPool(MemoryPool.Type.UNKNOWN, 0,0,0,0);
+        return new MemoryPool(MemoryPool.Type.UNKNOWN, 0, 0, 0, 0);
     }
 
     public float getNonHeapUsedMemoryPercent() {
         return nonHeapTotalMemory == 0 ? 0 : 100 * ((float) nonHeapUsedMemory / (float) nonHeapTotalMemory);
     }
-
 
     public MemoryPool getEdenMemoryPool() {
         return getMemoryPool(MemoryPool.Type.EDEN);
@@ -91,6 +90,23 @@ public class VirtualMachine implements Nameable, Descriptable, Serializable {
 
     public MemoryPool getSurvivorMemoryPool() {
         return getMemoryPool(MemoryPool.Type.SURVIVOR);
+    }
+
+    public MemoryPool getMetapaceMemoryPool() {
+        return getMemoryPool(MemoryPool.Type.METASPACE);
+    }
+
+    public BufferPool getBufferPools(BufferPool.Type type) {
+        int count = 0;
+        long used = 0;
+        long maximum = 0;
+        for (BufferPool bufferPool : bufferPools) {
+            if (bufferPool.getType() != type) continue;
+            count += bufferPool.getCount();
+            used += bufferPool.getUsed();
+            maximum += bufferPool.getMaximum();
+        }
+        return new BufferPool(type, count, used, maximum);
     }
 
     public void setMemoryPools(Collection<MemoryPool> memoryPools) {
