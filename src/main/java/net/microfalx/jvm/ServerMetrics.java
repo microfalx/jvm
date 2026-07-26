@@ -20,6 +20,21 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
     private final MutableStatisticalSummary cpuTotalSummary = new TimeWindowStatisticalSummary(getInterval());
     private final MutableStatisticalSummary cpuUserSummary = new TimeWindowStatisticalSummary(getInterval());
     private final MutableStatisticalSummary cpuSystemSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary cpuIoWaitSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary cpuNiceSummary = new TimeWindowStatisticalSummary(getInterval());
+
+    private final MutableStatisticalSummary load1Summary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary load5Summary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary load15Summary = new TimeWindowStatisticalSummary(getInterval());
+
+    private final MutableStatisticalSummary memoryUsedSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary memoryActuallyUsedSummary = new TimeWindowStatisticalSummary(getInterval());
+
+    private final MutableStatisticalSummary ioReadBytesSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary ioWriteBytesSummary = new TimeWindowStatisticalSummary(getInterval());
+
+    private final MutableStatisticalSummary networkReadBytesSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary networkWriteBytesSummary = new TimeWindowStatisticalSummary(getInterval());
 
     private final DoubleSummaryStatistics cpuStatistics = new DoubleSummaryStatistics();
     private final DoubleSummaryStatistics loadStatistics = new DoubleSummaryStatistics();
@@ -92,6 +107,138 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
     }
 
     /**
+     * Returns the average I/O wait CPU over the last monitoring interval.
+     *
+     * @return average I/O wait CPU percentage
+     * @see #getAverageInterval()
+     */
+    public float getAverageIoWaitCpu() {
+        synchronized (lock) {
+            return (float) cpuIoWaitSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average nice CPU over the last monitoring interval.
+     *
+     * @return average nice CPU percentage
+     * @see #getAverageInterval()
+     */
+    public float getAverageNiceCpu() {
+        synchronized (lock) {
+            return (float) cpuNiceSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average 1-minute load average over the last monitoring interval.
+     *
+     * @return average load (1 minute)
+     * @see #getAverageInterval()
+     */
+    public float getAverageLoad1() {
+        synchronized (lock) {
+            return (float) load1Summary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average 5-minute load average over the last monitoring interval.
+     *
+     * @return average load (5 minutes)
+     * @see #getAverageInterval()
+     */
+    public float getAverageLoad5() {
+        synchronized (lock) {
+            return (float) load5Summary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average 15-minute load average over the last monitoring interval.
+     *
+     * @return average load (15 minutes)
+     * @see #getAverageInterval()
+     */
+    public float getAverageLoad15() {
+        synchronized (lock) {
+            return (float) load15Summary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average used memory over the last monitoring interval.
+     *
+     * @return average bytes used
+     * @see #getAverageInterval()
+     */
+    public long getAverageMemoryUsed() {
+        synchronized (lock) {
+            return (long) memoryUsedSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average actually used memory over the last monitoring interval.
+     *
+     * @return average bytes actually used
+     * @see #getAverageInterval()
+     */
+    public long getAverageMemoryActuallyUsed() {
+        synchronized (lock) {
+            return (long) memoryActuallyUsedSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average I/O read bytes over the last monitoring interval.
+     *
+     * @return average bytes read
+     * @see #getAverageInterval()
+     */
+    public long getAverageIoReadBytes() {
+        synchronized (lock) {
+            return (long) ioReadBytesSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average I/O write bytes over the last monitoring interval.
+     *
+     * @return average bytes written
+     * @see #getAverageInterval()
+     */
+    public long getAverageIoWriteBytes() {
+        synchronized (lock) {
+            return (long) ioWriteBytesSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average network read bytes over the last monitoring interval.
+     *
+     * @return average bytes received
+     * @see #getAverageInterval()
+     */
+    public long getAverageNetworkReadBytes() {
+        synchronized (lock) {
+            return (long) networkReadBytesSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average network write bytes over the last monitoring interval.
+     *
+     * @return average bytes sent
+     * @see #getAverageInterval()
+     */
+    public long getAverageNetworkWriteBytes() {
+        synchronized (lock) {
+            return (long) networkWriteBytesSummary.getMean();
+        }
+    }
+
+    /**
      * Returns the average system load since the process startup.
      *
      * @return the load
@@ -122,6 +269,7 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
             collectCpu(server, batch);
             collectLoad(server, batch);
             collectIo(server, batch);
+            collectNetwork(server, batch);
             collectMisc(server, batch);
             updateStatistics(server);
             this.last = server;
@@ -132,6 +280,9 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
         batch.add(MEMORY_MAX, server.getMemoryTotal());
         batch.add(MEMORY_USED, server.getMemoryUsed());
         batch.add(MEMORY_ACTUALLY_USED, server.getMemoryActuallyUsed());
+
+        memoryUsedSummary.add(server.getMemoryUsed());
+        memoryActuallyUsedSummary.add(server.getMemoryActuallyUsed());
     }
 
     private void collectCpu(Server server, Batch batch) {
@@ -144,12 +295,18 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
         cpuTotalSummary.add(server.getCpuTotal());
         cpuUserSummary.add(server.getCpuUser());
         cpuSystemSummary.add(server.getCpuSystem());
+        cpuIoWaitSummary.add(server.getCpuIoWait());
+        cpuNiceSummary.add(server.getCpuNice());
     }
 
     private void collectLoad(Server server, Batch batch) {
         batch.add(LOAD_1, server.getLoad1());
         batch.add(LOAD_5, server.getLoad5());
         batch.add(LOAD_15, server.getLoad15());
+
+        load1Summary.add(server.getLoad1());
+        load5Summary.add(server.getLoad5());
+        load15Summary.add(server.getLoad15());
     }
 
     private void collectIo(Server server, Batch batch) {
@@ -157,6 +314,17 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
         batch.add(IO_READ_BYTES, server.getIoReadBytes());
         batch.add(IO_WRITES, server.getIoWrites());
         batch.add(IO_WRITE_BYTES, server.getIoWriteBytes());
+
+        ioReadBytesSummary.add(server.getIoReadBytes());
+        ioWriteBytesSummary.add(server.getIoWriteBytes());
+    }
+
+    private void collectNetwork(Server server, Batch batch) {
+        batch.add(NETWORK_READ_BYTES, server.getNetworkReadBytes());
+        batch.add(NETWORK_WRITE_BYTES, server.getNetworkWriteBytes());
+
+        networkReadBytesSummary.add(server.getNetworkReadBytes());
+        networkWriteBytesSummary.add(server.getNetworkWriteBytes());
     }
 
     private void collectMisc(Server server, Batch batch) {
@@ -168,6 +336,7 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
         cpuStatistics.accept(server.getCpuTotal());
         loadStatistics.accept(server.getLoad1());
         memoryStatistics.accept(server.getMemoryActuallyUsed());
+
     }
 
     private static final String METRIC_PREFIX = "server.";
@@ -190,6 +359,9 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
     public static final Metric IO_READ_BYTES = Metric.get(METRIC_PREFIX + "io.read.bytes").withGroup("I/O").withDisplayName("Read Bytes").withType(Metric.Type.COUNTER);
     public static final Metric IO_WRITES = Metric.get(METRIC_PREFIX + "io.writes").withGroup("I/O").withDisplayName("Writes").withType(Metric.Type.COUNTER);
     public static final Metric IO_WRITE_BYTES = Metric.get(METRIC_PREFIX + "io.write.bytes").withGroup("I/O").withDisplayName("Write Bytes").withType(Metric.Type.COUNTER);
+
+    public static final Metric NETWORK_READ_BYTES = Metric.get(METRIC_PREFIX + "network.read.bytes").withGroup("Network").withDisplayName("Network Read Bytes").withType(Metric.Type.COUNTER);
+    public static final Metric NETWORK_WRITE_BYTES = Metric.get(METRIC_PREFIX + "network.write.bytes").withGroup("Network").withDisplayName("Network Write Bytes").withType(Metric.Type.COUNTER);
 
     public static final Metric INTERRUPTS = Metric.get(METRIC_PREFIX + "interrupts").withGroup("Kernel").withDisplayName("Interrupts").withType(Metric.Type.COUNTER);
     public static final Metric CONTEXT_SWITCHES = Metric.get(METRIC_PREFIX + "context.switches").withGroup("Kernel").withDisplayName("Context Switches").withType(Metric.Type.COUNTER);

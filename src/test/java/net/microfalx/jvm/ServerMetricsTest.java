@@ -44,6 +44,8 @@ class ServerMetricsTest extends AbstractMetricsTest {
         assertTrue(metrics.getStore().getAverage(MEMORY_USED, ofSeconds(60)).orElse(0) > 0);
         assertTrue(metrics.getStore().getAverage(MEMORY_ACTUALLY_USED, ofSeconds(60)).orElse(0) > 0);
         assertTrue(metrics.getAverageMemory() > 0);
+        assertTrue(metrics.getAverageMemoryUsed() > 0);
+        assertTrue(metrics.getAverageMemoryActuallyUsed() > 0);
     }
 
     @Test
@@ -56,6 +58,8 @@ class ServerMetricsTest extends AbstractMetricsTest {
         assertTrue(metrics.getAverageTotalCpu() > 0);
         assertTrue(metrics.getAverageUserCpu() > 0);
         assertTrue(metrics.getAverageSystemCpu() > 0);
+        assertTrue(metrics.getAverageIoWaitCpu() >= 0);
+        assertTrue(metrics.getAverageNiceCpu() >= 0);
     }
 
     @Test
