@@ -30,6 +30,18 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     private final MutableStatisticalSummary memoryTenuredSummary = new TimeWindowStatisticalSummary(getInterval());
     private final MutableStatisticalSummary memoryMetaspaceSummary = new TimeWindowStatisticalSummary(getInterval());
 
+    private final MutableStatisticalSummary cpuUserSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary cpuSystemSummary = new TimeWindowStatisticalSummary(getInterval());
+
+    private final MutableStatisticalSummary gcEdenDurationSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary gcTenuredDurationSummary = new TimeWindowStatisticalSummary(getInterval());
+
+    private final MutableStatisticalSummary ioReadBytesSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary ioWriteBytesSummary = new TimeWindowStatisticalSummary(getInterval());
+
+    private final MutableStatisticalSummary threadSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary fileDescriptorsSummary = new TimeWindowStatisticalSummary(getInterval());
+
     private final DoubleSummaryStatistics cpuStatistics = new DoubleSummaryStatistics();
     private final LongSummaryStatistics heapStatistics = new LongSummaryStatistics();
     private final LongSummaryStatistics nonHeapStatistics = new LongSummaryStatistics();
@@ -87,6 +99,102 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     public long getAverageMetaspaceMemory() {
         synchronized (lock) {
             return (long) memoryMetaspaceSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average user CPU used over the last monitoring interval.
+     *
+     * @return the CPU percentage, between 0 and 100
+     * @see #getAverageInterval()
+     */
+    public float getAverageCpuUser() {
+        synchronized (lock) {
+            return (float) cpuUserSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average system CPU used over the last monitoring interval.
+     *
+     * @return the CPU percentage, between 0 and 100
+     * @see #getAverageInterval()
+     */
+    public float getAverageCpuSystem() {
+        synchronized (lock) {
+            return (float) cpuSystemSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average eden GC duration over the last monitoring interval.
+     *
+     * @return average duration in milliseconds
+     * @see #getAverageInterval()
+     */
+    public long getAverageGcEdenDuration() {
+        synchronized (lock) {
+            return (long) gcEdenDurationSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average tenured GC duration over the last monitoring interval.
+     *
+     * @return average duration in milliseconds
+     * @see #getAverageInterval()
+     */
+    public long getAverageGcTenuredDuration() {
+        synchronized (lock) {
+            return (long) gcTenuredDurationSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average I/O read bytes over the last monitoring interval.
+     *
+     * @return average bytes read
+     * @see #getAverageInterval()
+     */
+    public long getAverageIoReadBytes() {
+        synchronized (lock) {
+            return (long) ioReadBytesSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average I/O write bytes over the last monitoring interval.
+     *
+     * @return average bytes written
+     * @see #getAverageInterval()
+     */
+    public long getAverageIoWriteBytes() {
+        synchronized (lock) {
+            return (long) ioWriteBytesSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average OS thread count over the last monitoring interval.
+     *
+     * @return average number of threads
+     * @see #getAverageInterval()
+     */
+    public long getAverageThreads() {
+        synchronized (lock) {
+            return (long) threadSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average OS file descriptors count over the last monitoring interval.
+     *
+     * @return average number of threads
+     * @see #getAverageInterval()
+     */
+    public long getAverageFileDescriptors() {
+        synchronized (lock) {
+            return (long) fileDescriptorsSummary.getMean();
         }
     }
 
@@ -189,7 +297,7 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
 
         memoryEdenSummary.add(vm.getEdenMemoryPool().getUsed());
         memoryTenuredSummary.add(vm.getTenuredMemoryPool().getUsed());
-        memoryMetaspaceSummary.add(vm.getTenuredMemoryPool().getUsed());
+        memoryMetaspaceSummary.add(vm.getMetapaceMemoryPool().getUsed());
     }
 
     private void collectCpu(VirtualMachine vm, Batch batch) {
@@ -198,6 +306,9 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
         batch.add(CPU_USER, process.getCpuUser());
         batch.add(CPU_SYSTEM, process.getCpuSystem());
         batch.add(CPU_IO_WAIT, process.getCpuIoWait());
+
+        cpuUserSummary.add(process.getCpuUser());
+        cpuSystemSummary.add(process.getCpuSystem());
     }
 
     private void collectThread(VirtualMachine vm, Batch batch) {
@@ -205,6 +316,15 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
         batch.add(THREAD, vm.getProcess().getThreads());
         batch.add(THREAD_DAEMON, threadInformation.getDaemon());
         batch.add(THREAD_NON_DAEMON, threadInformation.getNonDaemon());
+
+        threadSummary.add(vm.getProcess().getThreads());
+    }
+
+    private void collectOther(VirtualMachine vm, Batch batch) {
+        Process process = vm.getProcess();
+        batch.add(FILE_DESCRIPTORS, process.getFileDescriptors());
+
+        fileDescriptorsSummary.add(process.getThreads());
     }
 
     private void collectGc(VirtualMachine vm, Batch batch) {
@@ -214,12 +334,18 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
         GarbageCollection tenured = vm.getGarbageCollection(GarbageCollection.Type.TENURED);
         batch.add(GC_TENURED_COUNT, tenured.getCount());
         batch.add(GC_TENURED_DURATION, tenured.getDuration());
+
+        gcEdenDurationSummary.add(eden.getDuration());
+        gcTenuredDurationSummary.add(tenured.getDuration());
     }
 
-    private static void collectIo(VirtualMachine vm, Batch batch) {
+    private void collectIo(VirtualMachine vm, Batch batch) {
         Process process = vm.getProcess();
         batch.add(IO_READ_BYTES, process.getBytesRead());
         batch.add(IO_WRITE_BYTES, process.getBytesWritten());
+
+        ioReadBytesSummary.add(process.getBytesRead());
+        ioWriteBytesSummary.add(process.getBytesWritten());
     }
 
     private void updateStatistics(VirtualMachine vm) {
@@ -257,4 +383,5 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     public static final Metric THREAD_DAEMON = Metric.get(METRIC_PREFIX + "thread.daemon").withGroup("Thread").withDisplayName("Daemon");
     public static final Metric THREAD_NON_DAEMON = Metric.get(METRIC_PREFIX + "thread.non_daemon").withGroup("Thread").withDisplayName("Non Daemon");
 
+    public static final Metric FILE_DESCRIPTORS = Metric.get(METRIC_PREFIX + "file_descriptors").withGroup("Other").withDisplayName("File Descriptors");
 }
