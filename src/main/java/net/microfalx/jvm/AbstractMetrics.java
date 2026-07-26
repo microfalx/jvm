@@ -36,6 +36,10 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
     private volatile Future<?> scrapeTask;
     private volatile SeriesStore seriesStore;
 
+    private Duration averageInterval = Duration.ofMinutes(5);
+
+    protected final Object lock = new Object();
+
     private static ScheduledExecutorService executorService;
 
     protected AbstractMetrics() {
@@ -46,7 +50,7 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
      *
      * @return {@code true} in memory, {@code false} otherwise
      */
-    public boolean isMemory() {
+    public final boolean isMemory() {
         return memory;
     }
 
@@ -55,7 +59,7 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
      *
      * @return self
      */
-    public AbstractMetrics<M, C> useMemory() {
+    public final AbstractMetrics<M, C> useMemory() {
         checkIfStarted();
         this.memory = true;
         return this;
@@ -67,7 +71,7 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
      * @param name the name of the store
      * @return self
      */
-    public AbstractMetrics<M, C> useDisk(String name) {
+    public final AbstractMetrics<M, C> useDisk(String name) {
         requireNotEmpty(name);
         checkIfStarted();
         this.memory = false;
@@ -80,7 +84,7 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
      *
      * @return a non-null instance
      */
-    public Duration getInterval() {
+    public final Duration getInterval() {
         return interval;
     }
 
@@ -94,6 +98,29 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
         requireNonNull(interval);
         this.interval = interval;
         createScrapeTask();
+        updateThresholds();
+        return this;
+    }
+
+    /**
+     * Returns the interval used to average metrics.
+     *
+     * @return a non-null instance
+     */
+    public final Duration getAverageInterval() {
+        return averageInterval;
+    }
+
+    /**
+     * Changes the time interval used to calculate averages (default is 5 minutes).
+     *
+     * @param averageInterval the new interval
+     * @return self
+     */
+    public final AbstractMetrics<M, C> setAverageInterval(Duration averageInterval) {
+        requireNonNull(averageInterval);
+        this.averageInterval = averageInterval;
+        updateThresholds();
         return this;
     }
 
@@ -178,6 +205,13 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
      * @return a non-null instance
      */
     protected abstract String getMetricsName();
+
+    /**
+     * Subclasses will be notified when thresholds are changed.
+     */
+    protected void updateThresholds() {
+        // empty by default
+    }
 
     private void createScrapeTask() {
         if (scrapeTask != null) scrapeTask.cancel(false);

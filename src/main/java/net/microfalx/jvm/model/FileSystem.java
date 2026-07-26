@@ -9,6 +9,9 @@ import java.time.temporal.Temporal;
 import java.util.HashSet;
 import java.util.Set;
 
+import static net.microfalx.lang.NumberUtils.percent;
+import static net.microfalx.lang.TimeUtils.fromMillis;
+
 @Data
 @NoArgsConstructor
 public class FileSystem implements Identifiable<String>, Nameable, Timestampable, Serializable {
@@ -30,11 +33,11 @@ public class FileSystem implements Identifiable<String>, Nameable, Timestampable
 
     @Override
     public Temporal getCreatedAt() {
-        return TimeUtils.fromMillis(timestamp);
+        return fromMillis(timestamp);
     }
 
     public float getUsedPercent() {
-        return totalSpace == 0 ? 0 : 100 * (float) (totalSpace - freeSpace) / (float) totalSpace;
+        return percent(totalSpace - freeSpace, totalSpace);
     }
 
     public boolean isDisk() {

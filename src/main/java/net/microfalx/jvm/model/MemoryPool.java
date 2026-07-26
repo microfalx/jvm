@@ -8,6 +8,8 @@ import net.microfalx.lang.NumberUtils;
 
 import java.io.Serializable;
 
+import static net.microfalx.lang.NumberUtils.percent;
+
 @Data
 @AllArgsConstructor
 public class MemoryPool implements Serializable {
@@ -21,13 +23,10 @@ public class MemoryPool implements Serializable {
     private long used;
     private long committed;
 
-    protected MemoryPool() {
-    }
-
     private final long timestamp = System.currentTimeMillis();
 
     public float getUsedPercent() {
-        return NumberUtils.percent(used, maximum);
+        return percent(used, maximum);
     }
 
     public long getMaximum() {

@@ -6,6 +6,8 @@ import net.microfalx.jvm.model.ThreadInformation;
 import net.microfalx.jvm.model.VirtualMachine;
 import net.microfalx.metrics.Batch;
 import net.microfalx.metrics.Metric;
+import net.microfalx.metrics.statistics.MutableStatisticalSummary;
+import net.microfalx.metrics.statistics.TimeWindowStatisticalSummary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,6 +25,11 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     private final VirtualMachineCollector collector = new VirtualMachineCollector(VirtualMachineMBeanServer.local());
 
     private volatile VirtualMachine last = new VirtualMachine();
+
+    private final MutableStatisticalSummary memoryEdenSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary memoryTenuredSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary memoryMetaspaceSummary = new TimeWindowStatisticalSummary(getInterval());
+
     private final DoubleSummaryStatistics cpuStatistics = new DoubleSummaryStatistics();
     private final LongSummaryStatistics heapStatistics = new LongSummaryStatistics();
     private final LongSummaryStatistics nonHeapStatistics = new LongSummaryStatistics();
@@ -41,8 +48,46 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
      *
      * @return the CPU, between 0 and 100
      */
-    public float getAverageCpu() {
-        return (float) cpuStatistics.getAverage();
+    public float getAverageCpuSinceStartup() {
+        synchronized (lock) {
+            return (float) cpuStatistics.getAverage();
+        }
+    }
+
+    /**
+     * Returns the average eden memory used over the last monitoring interval.
+     *
+     * @return average bytes used
+     * @see #getAverageInterval()
+     */
+    public long getAverageEdenMemory() {
+        synchronized (lock) {
+            return (long) memoryEdenSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average tenured memory used over the last monitoring interval.
+     *
+     * @return average bytes used
+     * @see #getAverageInterval()
+     */
+    public long getAverageTenuredMemory() {
+        synchronized (lock) {
+            return (long) memoryTenuredSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average metaspace memory used over the last monitoring interval.
+     *
+     * @return average bytes used
+     * @see #getAverageInterval()
+     */
+    public long getAverageMetaspaceMemory() {
+        synchronized (lock) {
+            return (long) memoryMetaspaceSummary.getMean();
+        }
     }
 
     /**
@@ -60,7 +105,7 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
      * @return the value in bytes
      */
     public long getMemoryAverage() {
-        return getHeapMemoryAverage() + getNonHeapMemoryAverage();
+        return getHeapMemoryAverageSinceStartup() + getNonHeapMemoryAverageSinceStartup();
     }
 
     /**
@@ -77,8 +122,10 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
      *
      * @return the value in bytes
      */
-    public long getHeapMemoryAverage() {
-        return (long) heapStatistics.getAverage();
+    public long getHeapMemoryAverageSinceStartup() {
+        synchronized (lock) {
+            return (long) heapStatistics.getAverage();
+        }
     }
 
     /**
@@ -95,8 +142,10 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
      *
      * @return the value in bytes
      */
-    public long getNonHeapMemoryAverage() {
-        return (long) nonHeapStatistics.getAverage();
+    public long getNonHeapMemoryAverageSinceStartup() {
+        synchronized (lock) {
+            return (long) nonHeapStatistics.getAverage();
+        }
     }
 
     /**
@@ -117,27 +166,33 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     @Override
     protected void collectMetrics(Batch batch) {
         VirtualMachine virtualMachine = collector.execute();
-        collectMemory(virtualMachine, batch);
-        collectCpu(virtualMachine, batch);
-        collectGc(virtualMachine, batch);
-        collectThread(virtualMachine, batch);
-        collectIo(virtualMachine, batch);
-        updateStatistics(virtualMachine);
-        this.last = virtualMachine;
+        synchronized (lock) {
+            collectMemory(virtualMachine, batch);
+            collectCpu(virtualMachine, batch);
+            collectGc(virtualMachine, batch);
+            collectThread(virtualMachine, batch);
+            collectIo(virtualMachine, batch);
+            updateStatistics(virtualMachine);
+            this.last = virtualMachine;
+        }
     }
 
-    private static void collectMemory(VirtualMachine vm, Batch batch) {
+    private void collectMemory(VirtualMachine vm, Batch batch) {
         batch.add(MEMORY_HEAP_MAX, vm.getHeapTotalMemory());
         batch.add(MEMORY_HEAP_USED, vm.getHeapUsedMemory());
         batch.add(MEMORY_NON_HEAP_MAX, vm.getNonHeapTotalMemory());
         batch.add(MEMORY_NON_HEAP_USED, vm.getNonHeapUsedMemory());
-        batch.add(MEMORY_EDEN_USED, vm.getTenuredMemoryPool().getUsed());
+        batch.add(MEMORY_EDEN_USED, vm.getEdenMemoryPool().getUsed());
         batch.add(MEMORY_EDEN_MAX, vm.getEdenMemoryPool().getMaximum());
         batch.add(MEMORY_TENURED_MAX, vm.getTenuredMemoryPool().getMaximum());
         batch.add(MEMORY_TENURED_USED, vm.getTenuredMemoryPool().getUsed());
+
+        memoryEdenSummary.add(vm.getEdenMemoryPool().getUsed());
+        memoryTenuredSummary.add(vm.getTenuredMemoryPool().getUsed());
+        memoryMetaspaceSummary.add(vm.getTenuredMemoryPool().getUsed());
     }
 
-    private static void collectCpu(VirtualMachine vm, Batch batch) {
+    private void collectCpu(VirtualMachine vm, Batch batch) {
         Process process = vm.getProcess();
         batch.add(CPU_TOTAL, process.getCpuTotal());
         batch.add(CPU_USER, process.getCpuUser());
@@ -145,14 +200,14 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
         batch.add(CPU_IO_WAIT, process.getCpuIoWait());
     }
 
-    private static void collectThread(VirtualMachine vm, Batch batch) {
+    private void collectThread(VirtualMachine vm, Batch batch) {
         ThreadInformation threadInformation = vm.getThreadInformation();
         batch.add(THREAD, vm.getProcess().getThreads());
         batch.add(THREAD_DAEMON, threadInformation.getDaemon());
         batch.add(THREAD_NON_DAEMON, threadInformation.getNonDaemon());
     }
 
-    private static void collectGc(VirtualMachine vm, Batch batch) {
+    private void collectGc(VirtualMachine vm, Batch batch) {
         GarbageCollection eden = vm.getGarbageCollection(GarbageCollection.Type.EDEN);
         batch.add(GC_EDEN_COUNT, eden.getCount());
         batch.add(GC_EDEN_DURATION, eden.getDuration());

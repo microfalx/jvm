@@ -45,12 +45,18 @@ class VirtualMachineMetricsTest extends AbstractMetricsTest {
         assertTrue(metrics.getStore().getAverage(VirtualMachineMetrics.MEMORY_NON_HEAP_USED, ofSeconds(60)).orElse(0) > 0);
         assertTrue(metrics.getStore().getAverage(VirtualMachineMetrics.MEMORY_EDEN_USED, ofSeconds(60)).orElse(0) > 0);
         assertTrue(metrics.getStore().getAverage(VirtualMachineMetrics.MEMORY_TENURED_USED, ofSeconds(60)).orElse(0) > 0);
+        assertTrue(metrics.getAverageEdenMemory() > 0);
+        assertTrue(metrics.getAverageTenuredMemory() > 0);
+        assertTrue(metrics.getAverageMetaspaceMemory() > 0);
+        assertTrue(metrics.getHeapMemoryAverageSinceStartup() > 0);
+        assertTrue(metrics.getNonHeapMemoryAverageSinceStartup() > 0);
+        assertTrue(metrics.getMemoryAverage() > 0);
     }
 
     @Test
     public void averageCpu() {
         scrapeInLoop();
-        Assertions.assertThat(metrics.getAverageCpu()).isBetween(10f, 50f);
+        Assertions.assertThat(metrics.getAverageCpuSinceStartup()).isBetween(10f, 50f);
     }
 
     @Test

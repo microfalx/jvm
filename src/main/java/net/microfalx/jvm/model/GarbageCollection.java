@@ -4,8 +4,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
+import net.microfalx.lang.NumberUtils;
 
 import java.io.Serializable;
+import java.time.Duration;
+
+import static java.time.Duration.ofMillis;
 
 @Data
 @AllArgsConstructor
@@ -17,7 +21,8 @@ public class GarbageCollection implements Serializable {
     private long duration;
     private int count;
 
-    protected GarbageCollection() {
+    public Duration getAverage() {
+        return ofMillis((long) NumberUtils.average(duration, (float) count));
     }
 
     @Getter

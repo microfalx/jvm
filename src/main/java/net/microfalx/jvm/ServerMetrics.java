@@ -3,6 +3,8 @@ package net.microfalx.jvm;
 import net.microfalx.jvm.model.Server;
 import net.microfalx.metrics.Batch;
 import net.microfalx.metrics.Metric;
+import net.microfalx.metrics.statistics.MutableStatisticalSummary;
+import net.microfalx.metrics.statistics.TimeWindowStatisticalSummary;
 
 import java.util.DoubleSummaryStatistics;
 import java.util.LongSummaryStatistics;
@@ -14,6 +16,10 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
 
     private static final ServerMetrics instance = new ServerMetrics();
     private final ServerCollector collector = new ServerCollector();
+
+    private final MutableStatisticalSummary cpuTotalSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary cpuUserSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final MutableStatisticalSummary cpuSystemSummary = new TimeWindowStatisticalSummary(getInterval());
 
     private final DoubleSummaryStatistics cpuStatistics = new DoubleSummaryStatistics();
     private final DoubleSummaryStatistics loadStatistics = new DoubleSummaryStatistics();
@@ -45,8 +51,44 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
      *
      * @return the CPU, between 0 and 100
      */
-    public float getAverageCpu() {
+    public float getAverageTotalCpuSinceStartup() {
         return (float) cpuStatistics.getAverage();
+    }
+
+    /**
+     * Returns the average total CPU over the last monitoring interval.
+     *
+     * @return average bytes used
+     * @see #getAverageInterval()
+     */
+    public float getAverageTotalCpu() {
+        synchronized (lock) {
+            return (float) cpuTotalSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average user space CPU over the last monitoring interval.
+     *
+     * @return average bytes used
+     * @see #getAverageInterval()
+     */
+    public float getAverageUserCpu() {
+        synchronized (lock) {
+            return (float) cpuUserSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average system space CPU over the last monitoring interval.
+     *
+     * @return average bytes used
+     * @see #getAverageInterval()
+     */
+    public float getAverageSystemCpu() {
+        synchronized (lock) {
+            return (float) cpuSystemSummary.getMean();
+        }
     }
 
     /**
@@ -75,43 +117,49 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
     @Override
     protected void collectMetrics(Batch batch) {
         Server server = collector.execute();
-        collectMemory(server, batch);
-        collectCpu(server, batch);
-        collectLoad(server, batch);
-        collectIo(server, batch);
-        collectMisc(server, batch);
-        updateStatistics(server);
-        this.last = server;
+        synchronized (lock) {
+            collectMemory(server, batch);
+            collectCpu(server, batch);
+            collectLoad(server, batch);
+            collectIo(server, batch);
+            collectMisc(server, batch);
+            updateStatistics(server);
+            this.last = server;
+        }
     }
 
-    static void collectMemory(Server server, Batch batch) {
+    private void collectMemory(Server server, Batch batch) {
         batch.add(MEMORY_MAX, server.getMemoryTotal());
         batch.add(MEMORY_USED, server.getMemoryUsed());
         batch.add(MEMORY_ACTUALLY_USED, server.getMemoryActuallyUsed());
     }
 
-    static void collectCpu(Server server, Batch batch) {
+    private void collectCpu(Server server, Batch batch) {
         batch.add(CPU_TOTAL, server.getCpuTotal());
         batch.add(CPU_USER, server.getCpuUser());
         batch.add(CPU_SYSTEM, server.getCpuSystem());
         batch.add(CPU_IO_WAIT, server.getCpuIoWait());
         batch.add(CPU_NICE, server.getCpuNice());
+
+        cpuTotalSummary.add(server.getCpuTotal());
+        cpuUserSummary.add(server.getCpuUser());
+        cpuSystemSummary.add(server.getCpuSystem());
     }
 
-    static void collectLoad(Server server, Batch batch) {
+    private void collectLoad(Server server, Batch batch) {
         batch.add(LOAD_1, server.getLoad1());
         batch.add(LOAD_5, server.getLoad5());
         batch.add(LOAD_15, server.getLoad15());
     }
 
-    static void collectIo(Server server, Batch batch) {
+    private void collectIo(Server server, Batch batch) {
         batch.add(IO_READS, server.getIoReads());
         batch.add(IO_READ_BYTES, server.getIoReadBytes());
         batch.add(IO_WRITES, server.getIoWrites());
         batch.add(IO_WRITE_BYTES, server.getIoWriteBytes());
     }
 
-    static void collectMisc(Server server, Batch batch) {
+    private void collectMisc(Server server, Batch batch) {
         batch.add(INTERRUPTS, server.getInterrupts());
         batch.add(CONTEXT_SWITCHES, server.getContextSwitches());
     }
