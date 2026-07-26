@@ -76,8 +76,8 @@ class VirtualMachineMetricsTest extends AbstractMetricsTest {
         assertTrue(metrics.getStore().getAverage(VirtualMachineMetrics.GC_EDEN_DURATION, ofSeconds(60)).orElse(0) > 0);
         assertTrue(metrics.getStore().getAverage(VirtualMachineMetrics.GC_TENURED_COUNT, ofSeconds(60)).orElse(0) > 0);
         assertTrue(metrics.getStore().getAverage(VirtualMachineMetrics.GC_TENURED_DURATION, ofSeconds(60)).orElse(0) > 0);
-        assertTrue(metrics.getAverageGcEdenDuration() > 0);
-        assertTrue(metrics.getAverageGcTenuredDuration() > 0);
+        assertTrue(metrics.getAverageGcEdenDuration().toMillis() > 0);
+        assertTrue(metrics.getAverageGcTenuredDuration().toMillis() > 0);
     }
 
     @Test
@@ -98,7 +98,7 @@ class VirtualMachineMetricsTest extends AbstractMetricsTest {
             ThreadUtils.sleepSeconds(1);
             Process process = vm.getProcess();
             System.out.println("CPU: System " + formatPercent(process.getCpuSystem())
-                               + ", User " + formatPercent(process.getCpuUser()));
+                    + ", User " + formatPercent(process.getCpuUser()));
         }
     }
 

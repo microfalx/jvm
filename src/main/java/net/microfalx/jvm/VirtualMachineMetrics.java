@@ -11,6 +11,7 @@ import net.microfalx.metrics.statistics.TimeWindowStatisticalSummary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.DoubleSummaryStatistics;
 import java.util.LongSummaryStatistics;
 
@@ -132,9 +133,9 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
      * @return average duration in milliseconds
      * @see #getAverageInterval()
      */
-    public long getAverageGcEdenDuration() {
+    public Duration getAverageGcEdenDuration() {
         synchronized (lock) {
-            return (long) gcEdenDurationSummary.getMean();
+            return Duration.ofMillis((long) gcEdenDurationSummary.getMean());
         }
     }
 
@@ -144,9 +145,9 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
      * @return average duration in milliseconds
      * @see #getAverageInterval()
      */
-    public long getAverageGcTenuredDuration() {
+    public Duration getAverageGcTenuredDuration() {
         synchronized (lock) {
-            return (long) gcTenuredDurationSummary.getMean();
+            return Duration.ofMillis((long) gcTenuredDurationSummary.getMean());
         }
     }
 
@@ -180,9 +181,9 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
      * @return average number of threads
      * @see #getAverageInterval()
      */
-    public long getAverageThreads() {
+    public int getAverageThreads() {
         synchronized (lock) {
-            return (long) threadSummary.getMean();
+            return (int) threadSummary.getMean();
         }
     }
 
@@ -192,9 +193,9 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
      * @return average number of threads
      * @see #getAverageInterval()
      */
-    public long getAverageFileDescriptors() {
+    public int getAverageFileDescriptors() {
         synchronized (lock) {
-            return (long) fileDescriptorsSummary.getMean();
+            return (int) fileDescriptorsSummary.getMean();
         }
     }
 
