@@ -213,6 +213,13 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
         // empty by default
     }
 
+    /**
+     * Invoked during initialization to prepare the metrics collection.
+     */
+    protected void doInitialize() {
+        // empty by default
+    }
+
     private void createScrapeTask() {
         if (scrapeTask != null) scrapeTask.cancel(false);
         scrapeTask = executor.scheduleAtFixedRate(new CollectorWorker(), 0, interval.toMillis(), MILLISECONDS);
@@ -226,6 +233,7 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
         if (seriesStore == null) {
             seriesStore = memory ? SeriesStore.memory() : SeriesStore.disk(name);
         }
+        doInitialize();
     }
 
     private static ScheduledExecutorService getSharedExecutor() {
