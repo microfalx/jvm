@@ -13,6 +13,7 @@ import oshi.software.os.OperatingSystem;
 import java.lang.management.*;
 import java.util.*;
 
+import static net.microfalx.jvm.VirtualMachineUtils.COLLECTOR_METRICS;
 import static net.microfalx.lang.ArgumentUtils.requireNonNull;
 
 /**
@@ -36,7 +37,7 @@ public final class VirtualMachineCollector extends AbstractCollector<VirtualMach
 
     public VirtualMachine execute() {
         VirtualMachine vm = new VirtualMachine();
-        try (Timer ignored = VirtualMachineUtils.METRICS.startTimer("Collect VM")) {
+        try (Timer ignored = COLLECTOR_METRICS.startTimer("JVM")) {
             vm.setLocal(machineMBeanServer.isLocal());
             collectPid(vm);
             collectProcess(vm);

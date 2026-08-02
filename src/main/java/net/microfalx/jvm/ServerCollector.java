@@ -15,6 +15,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static net.microfalx.jvm.VirtualMachineUtils.COLLECTOR_METRICS;
 import static net.microfalx.lang.StringUtils.toIdentifier;
 
 /**
@@ -30,7 +31,7 @@ public final class ServerCollector extends AbstractCollector<Server> {
 
     @Override
     public Server execute() {
-        try (Timer ignored = VirtualMachineUtils.METRICS.startTimer("Collect VM")) {
+        try (Timer ignored = COLLECTOR_METRICS.startTimer("Server")) {
             Server server = new Server();
             server.setHostName(JvmUtils.getLocalHost().getCanonicalHostName());
             server.setId(toIdentifier(server.getHostName()));
@@ -164,7 +165,7 @@ public final class ServerCollector extends AbstractCollector<Server> {
                 server.setCpuSoftIrq(getTick(CentralProcessor.TickType.SOFTIRQ, duration, ticks, prevTicks));
                 server.setCpuStolen(getTick(CentralProcessor.TickType.STEAL, duration, ticks, prevTicks));
                 server.setCpuTotal(server.getCpuUser() + server.getCpuNice() + server.getCpuSystem()
-                                   + server.getCpuIoWait() + server.getCpuIrq() + server.getCpuSoftIrq() + server.getCpuStolen());
+                        + server.getCpuIoWait() + server.getCpuIrq() + server.getCpuSoftIrq() + server.getCpuStolen());
             } catch (IllegalArgumentException e) {
                 // ignore
             }

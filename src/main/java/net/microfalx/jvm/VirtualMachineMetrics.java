@@ -356,7 +356,7 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
         nonHeapStatistics.accept(vm.getNonHeapUsedMemory());
     }
 
-    private static final String METRIC_PREFIX = "jvm.";
+    public static final String METRIC_PREFIX = "jvm.";
 
     public static final Metric MEMORY_HEAP_MAX = Metric.get(METRIC_PREFIX + "memory.heap.max").withGroup("Heap").withDisplayName("Maximum");
     public static final Metric MEMORY_HEAP_USED = Metric.get(METRIC_PREFIX + "memory.heap.used").withGroup("Heap").withDisplayName("Used");

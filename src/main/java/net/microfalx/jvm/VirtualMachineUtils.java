@@ -6,7 +6,9 @@ import oshi.software.common.os.linux.LinuxFileSystem;
 
 public class VirtualMachineUtils {
 
-    protected final static Metrics METRICS = Metrics.ROOT.withGroup("VM");
+    public final static Metrics JVM_METRICS = Metrics.ROOT.withGroup("JVM");
+    public final static Metrics COLLECTOR_METRICS = JVM_METRICS.withGroup("Collector");
+    public final static Metrics METRICS_METRICS = JVM_METRICS.withGroup("Metrics");
 
     /**
      * Calculate the usage time in percent based on uptime and actual usage.

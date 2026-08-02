@@ -1,7 +1,6 @@
 package net.microfalx.jvm;
 
 import net.microfalx.metrics.Batch;
-import net.microfalx.metrics.Metrics;
 import net.microfalx.metrics.SeriesStore;
 import net.microfalx.threadpool.AbstractRunnable;
 import org.slf4j.Logger;
@@ -14,6 +13,8 @@ import java.util.concurrent.ScheduledExecutorService;
 
 import static java.lang.System.currentTimeMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static net.microfalx.jvm.VirtualMachineUtils.COLLECTOR_METRICS;
+import static net.microfalx.jvm.VirtualMachineUtils.METRICS_METRICS;
 import static net.microfalx.lang.ArgumentUtils.requireNonNull;
 import static net.microfalx.lang.ArgumentUtils.requireNotEmpty;
 import static net.microfalx.lang.ExceptionUtils.getRootCauseDescription;
@@ -25,8 +26,6 @@ import static net.microfalx.lang.StringUtils.joinNames;
 public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AbstractMetrics.class);
-
-    protected final static Metrics METRICS = VirtualMachineUtils.METRICS.withGroup("Metrics");
 
     private ScheduledExecutorService executor;
     private volatile String name;
@@ -163,8 +162,8 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
     public void scrape() {
         if (seriesStore == null) initialize();
         Batch batch = Batch.create(currentTimeMillis());
-        METRICS.time("Scrape " + getMetricsName(), t -> collectMetrics(batch));
-        METRICS.time("Store " + getMetricsName(), t -> getStore().add(batch));
+        METRICS_METRICS.time("Scrape " + getMetricsName(), t -> collectMetrics(batch));
+        METRICS_METRICS.time("Store " + getMetricsName(), t -> getStore().add(batch));
     }
 
     /**

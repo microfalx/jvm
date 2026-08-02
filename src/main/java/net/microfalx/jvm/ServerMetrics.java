@@ -339,7 +339,7 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
 
     }
 
-    private static final String METRIC_PREFIX = "server.";
+    public static final String METRIC_PREFIX = "server.";
 
     public static final Metric MEMORY_MAX = Metric.get(METRIC_PREFIX + "memory.max").withGroup("Server / Memory").withDisplayName("Maximum");
     public static final Metric MEMORY_USED = Metric.get(METRIC_PREFIX + "memory.used").withGroup("Server / Memory").withDisplayName("Used");
