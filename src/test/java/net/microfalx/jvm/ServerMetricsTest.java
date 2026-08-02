@@ -43,7 +43,7 @@ class ServerMetricsTest extends AbstractMetricsTest {
         assertTrue(metrics.getStore().getAverage(MEMORY_MAX, ofSeconds(60)).orElse(0) > 0);
         assertTrue(metrics.getStore().getAverage(MEMORY_USED, ofSeconds(60)).orElse(0) > 0);
         assertTrue(metrics.getStore().getAverage(MEMORY_ACTUALLY_USED, ofSeconds(60)).orElse(0) > 0);
-        assertTrue(metrics.getAverageMemory() > 0);
+        assertTrue(metrics.getAverageMemorySinceStartup() > 0);
         assertTrue(metrics.getAverageMemoryUsed() > 0);
         assertTrue(metrics.getAverageMemoryActuallyUsed() > 0);
     }

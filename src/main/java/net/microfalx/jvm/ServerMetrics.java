@@ -243,7 +243,7 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
      *
      * @return the load
      */
-    public double getAverageLoad() {
+    public double getAverageLoadSinceStartup() {
         return loadStatistics.getAverage();
     }
 
@@ -252,7 +252,7 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
      *
      * @return a positive integer
      */
-    public long getAverageMemory() {
+    public long getAverageMemorySinceStartup() {
         return (long) memoryStatistics.getAverage();
     }
 
