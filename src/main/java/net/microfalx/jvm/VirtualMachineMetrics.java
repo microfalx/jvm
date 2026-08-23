@@ -46,6 +46,7 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     private final DoubleSummaryStatistics cpuStatistics = new DoubleSummaryStatistics();
     private final LongSummaryStatistics heapStatistics = new LongSummaryStatistics();
     private final LongSummaryStatistics nonHeapStatistics = new LongSummaryStatistics();
+    private final LongSummaryStatistics tenuredStatistics = new LongSummaryStatistics();
 
     /**
      * Returns the global instance.
@@ -227,7 +228,7 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     }
 
     /**
-     * Returns the average HEAP usage.
+     * Returns the average HEAP usage since startup.
      *
      * @return the value in bytes
      */
@@ -247,13 +248,24 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     }
 
     /**
-     * Returns the average NON_HEAP usage.
+     * Returns the average NON_HEAP usage since startup.
      *
      * @return the value in bytes
      */
     public long getNonHeapMemoryAverageSinceStartup() {
         synchronized (lock) {
             return (long) nonHeapStatistics.getAverage();
+        }
+    }
+
+    /**
+     * Returns the average tenured memory usage.
+     *
+     * @return the value in bytes
+     */
+    public long getTenuredMemoryAverageSinceStartup() {
+        synchronized (lock) {
+            return (long) tenuredStatistics.getAverage();
         }
     }
 
@@ -353,6 +365,7 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
         Process process = vm.getProcess();
         cpuStatistics.accept(process.getCpuTotal());
         heapStatistics.accept(vm.getHeapUsedMemory());
+        tenuredStatistics.accept(vm.getTenuredMemoryPool().getUsed());
         nonHeapStatistics.accept(vm.getNonHeapUsedMemory());
     }
 
