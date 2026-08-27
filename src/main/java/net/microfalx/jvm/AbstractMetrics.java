@@ -13,7 +13,6 @@ import java.util.concurrent.ScheduledExecutorService;
 
 import static java.lang.System.currentTimeMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static net.microfalx.jvm.VirtualMachineUtils.COLLECTOR_METRICS;
 import static net.microfalx.jvm.VirtualMachineUtils.METRICS_METRICS;
 import static net.microfalx.lang.ArgumentUtils.requireNonNull;
 import static net.microfalx.lang.ArgumentUtils.requireNotEmpty;
@@ -31,11 +30,10 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
     private volatile String name;
     private volatile boolean memory = true;
     private volatile boolean started;
-    private volatile Duration interval = Duration.ofSeconds(5);
+    private volatile Duration scrapeInterval = Duration.ofSeconds(5);
     private volatile Future<?> scrapeTask;
+    private volatile Duration averageInterval = Duration.ofMinutes(5);
     private volatile SeriesStore seriesStore;
-
-    private Duration averageInterval = Duration.ofMinutes(5);
 
     protected final Object lock = new Object();
 
@@ -83,20 +81,20 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
      *
      * @return a non-null instance
      */
-    public final Duration getInterval() {
-        return interval;
+    public final Duration getScrapeInterval() {
+        return scrapeInterval;
     }
 
     /**
      * Changes the scrape interval.
      *
-     * @param interval the new interval
+     * @param scrapeInterval the new interval
      * @return self
      */
-    public AbstractMetrics<M, C> setInterval(Duration interval) {
-        requireNonNull(interval);
-        this.interval = interval;
-        createScrapeTask();
+    public AbstractMetrics<M, C> setScrapeInterval(Duration scrapeInterval) {
+        requireNonNull(scrapeInterval);
+        this.scrapeInterval = scrapeInterval;
+        if (isStarted()) createScrapeTask();
         updateThresholds();
         return this;
     }
@@ -156,6 +154,7 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
         started = true;
     }
 
+
     /**
      * Scrapes for new metrics.
      */
@@ -170,6 +169,7 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
      * Stops the data collection.
      */
     public synchronized void stop() {
+        stopScrapeTask();
         started = false;
     }
 
@@ -220,8 +220,15 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
     }
 
     private void createScrapeTask() {
-        if (scrapeTask != null) scrapeTask.cancel(false);
-        scrapeTask = executor.scheduleAtFixedRate(new CollectorWorker(), 0, interval.toMillis(), MILLISECONDS);
+        stopScrapeTask();
+        scrapeTask = executor.scheduleAtFixedRate(new CollectorWorker(), 0, scrapeInterval.toMillis(), MILLISECONDS);
+    }
+
+    private void stopScrapeTask() {
+        if (scrapeTask != null) {
+            scrapeTask.cancel(false);
+            scrapeTask = null;
+        }
     }
 
     private void checkIfStarted() {
@@ -265,7 +272,7 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
 
         @Override
         public String toString() {
-            return getName() + ", interval: " + getInterval();
+            return getName() + ", interval: " + getScrapeInterval();
         }
     }
 

@@ -17,24 +17,24 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
     private static final ServerMetrics instance = new ServerMetrics();
     private final ServerCollector collector = new ServerCollector();
 
-    private final MutableStatisticalSummary cpuTotalSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary cpuUserSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary cpuSystemSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary cpuIoWaitSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary cpuNiceSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary cpuTotalSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary cpuUserSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary cpuSystemSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary cpuIoWaitSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary cpuNiceSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
-    private final MutableStatisticalSummary load1Summary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary load5Summary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary load15Summary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary load1Summary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary load5Summary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary load15Summary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
-    private final MutableStatisticalSummary memoryUsedSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary memoryActuallyUsedSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary memoryUsedSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary memoryActuallyUsedSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
-    private final MutableStatisticalSummary ioReadBytesSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary ioWriteBytesSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary ioReadBytesSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary ioWriteBytesSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
-    private final MutableStatisticalSummary networkReadBytesSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary networkWriteBytesSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary networkReadBytesSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary networkWriteBytesSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
     private final DoubleSummaryStatistics cpuStatistics = new DoubleSummaryStatistics();
     private final DoubleSummaryStatistics loadStatistics = new DoubleSummaryStatistics();
@@ -274,6 +274,25 @@ public final class ServerMetrics extends AbstractMetrics<Server, ServerCollector
             updateStatistics(server);
             this.last = server;
         }
+    }
+
+    @Override
+    protected void updateThresholds() {
+        super.updateThresholds();
+        cpuTotalSummary.setInterval(getAverageInterval());
+        cpuUserSummary.setInterval(getAverageInterval());
+        cpuSystemSummary.setInterval(getAverageInterval());
+        cpuIoWaitSummary.setInterval(getAverageInterval());
+        cpuNiceSummary.setInterval(getAverageInterval());
+        memoryUsedSummary.setInterval(getAverageInterval());
+        memoryActuallyUsedSummary.setInterval(getAverageInterval());
+        ioReadBytesSummary.setInterval(getAverageInterval());
+        ioWriteBytesSummary.setInterval(getAverageInterval());
+        networkReadBytesSummary.setInterval(getAverageInterval());
+        networkWriteBytesSummary.setInterval(getAverageInterval());
+        load1Summary.setInterval(getAverageInterval());
+        load5Summary.setInterval(getAverageInterval());
+        load15Summary.setInterval(getAverageInterval());
     }
 
     private void collectMemory(Server server, Batch batch) {

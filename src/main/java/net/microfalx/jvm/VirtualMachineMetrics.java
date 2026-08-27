@@ -6,7 +6,6 @@ import net.microfalx.jvm.model.ThreadInformation;
 import net.microfalx.jvm.model.VirtualMachine;
 import net.microfalx.metrics.Batch;
 import net.microfalx.metrics.Metric;
-import net.microfalx.metrics.statistics.MutableStatisticalSummary;
 import net.microfalx.metrics.statistics.TimeWindowStatisticalSummary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,7 +17,8 @@ import java.util.LongSummaryStatistics;
 /**
  * A singleton class which collects JVM metrics and stores them in the store.
  */
-public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine, VirtualMachineCollector> {
+public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine, VirtualMachineCollector>
+        implements ObjectSizeEstimator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(VirtualMachineMetrics.class);
 
@@ -27,26 +27,28 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
 
     private volatile VirtualMachine last = new VirtualMachine();
 
-    private final MutableStatisticalSummary memoryEdenSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary memoryTenuredSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary memoryMetaspaceSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary memoryEdenSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary memoryTenuredSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary memoryMetaspaceSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
-    private final MutableStatisticalSummary cpuUserSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary cpuSystemSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary cpuUserSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary cpuSystemSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
-    private final MutableStatisticalSummary gcEdenDurationSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary gcTenuredDurationSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary gcEdenDurationSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary gcTenuredDurationSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
-    private final MutableStatisticalSummary ioReadBytesSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary ioWriteBytesSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary ioReadBytesSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary ioWriteBytesSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
-    private final MutableStatisticalSummary threadSummary = new TimeWindowStatisticalSummary(getInterval());
-    private final MutableStatisticalSummary fileDescriptorsSummary = new TimeWindowStatisticalSummary(getInterval());
+    private final TimeWindowStatisticalSummary threadSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary fileDescriptorsSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
     private final DoubleSummaryStatistics cpuStatistics = new DoubleSummaryStatistics();
     private final LongSummaryStatistics heapStatistics = new LongSummaryStatistics();
     private final LongSummaryStatistics nonHeapStatistics = new LongSummaryStatistics();
     private final LongSummaryStatistics tenuredStatistics = new LongSummaryStatistics();
+
+    private final ObjectSizeEstimator objectSizeEstimator = new DefaultObjectSizeEstimator();
 
     /**
      * Returns the global instance.
@@ -55,6 +57,14 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
      */
     public static VirtualMachineMetrics get() {
         return instance;
+    }
+
+    public long getShallowSize(Object object) {
+        return objectSizeEstimator.getShallowSize(object);
+    }
+
+    public long getDeepSize(Object object) {
+        return objectSizeEstimator.getDeepSize(object);
     }
 
     /**
@@ -296,6 +306,22 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
             updateStatistics(virtualMachine);
             this.last = virtualMachine;
         }
+    }
+
+    @Override
+    protected void updateThresholds() {
+        super.updateThresholds();
+        memoryEdenSummary.setInterval(getAverageInterval());
+        memoryTenuredSummary.setInterval(getAverageInterval());
+        memoryMetaspaceSummary.setInterval(getAverageInterval());
+        cpuUserSummary.setInterval(getAverageInterval());
+        cpuSystemSummary.setInterval(getAverageInterval());
+        gcEdenDurationSummary.setInterval(getAverageInterval());
+        gcTenuredDurationSummary.setInterval(getAverageInterval());
+        ioReadBytesSummary.setInterval(getAverageInterval());
+        ioWriteBytesSummary.setInterval(getAverageInterval());
+        threadSummary.setInterval(getAverageInterval());
+        fileDescriptorsSummary.setInterval(getAverageInterval());
     }
 
     private void collectMemory(VirtualMachine vm, Batch batch) {
