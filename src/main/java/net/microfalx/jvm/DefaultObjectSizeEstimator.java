@@ -2,12 +2,15 @@ package net.microfalx.jvm;
 
 import lombok.extern.slf4j.Slf4j;
 import net.microfalx.lang.ReflectionUtils;
+import net.microfalx.lang.annotation.SizeOf;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.time.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.*;
 
 @Slf4j
 public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
@@ -16,6 +19,7 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
 
     private final Map<Class<?>, Integer> shallowSizeCache = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Integer> overheadByType = new HashMap<>();
+    private static final Map<Class<?>, Integer> sizeByType = new HashMap<>();
     private static Unsafe unsafe;
 
     @Override
@@ -32,6 +36,8 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
 
     private long getDeepSize(Object object, Set<Object> visited) {
         if (!visited.add(object)) return getPointerSize();
+        Integer specialSize = getSpecialSize(object);
+        if (specialSize != null) return specialSize;
         long size = shallowSizeOf(object);
         if (object instanceof String) {
             size += ((String) object).length() * 2;
@@ -80,11 +86,14 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         long size = 0;
         List<Field> fields = ReflectionUtils.openFields(object.getClass());
         for (Field field : fields) {
-            int fieldSize = getFieldSize(field.getType());
-            if (fieldSize > 0) continue;
+            SizeOf sizeOfAnnot = field.getAnnotation(SizeOf.class);
+            if (sizeOfAnnot != null && sizeOfAnnot.shallow()) continue;
+            if (field.getType().isPrimitive()) continue;
             try {
                 Object fieldValue = field.get(object);
-                size += getDeepSize(fieldValue, visited);
+                if (fieldValue != null) {
+                    size += getDeepSize(fieldValue, visited);
+                }
             } catch (IllegalAccessException e) {
                 // Ignore inaccessible fields
             }
@@ -124,7 +133,12 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         while (clazz != null) {
             for (Field field : clazz.getDeclaredFields()) {
                 if (!Modifier.isStatic(field.getModifiers())) {
-                    int offset = (int) unsafe.objectFieldOffset(field);
+                    int offset = 0;
+                    try {
+                        offset = (int) unsafe.objectFieldOffset(field);
+                    } catch (UnsupportedOperationException e) {
+                        // Ignore fields that cannot be accessed
+                    }
                     if (offset > maxOffset) {
                         maxOffset = offset;
                         maxFieldType = field.getType();
@@ -135,6 +149,13 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         }
         if (maxOffset > 0) maxOffset += getFieldSize(maxFieldType);
         return maxOffset;
+    }
+
+    private Integer getSpecialSize(Object object) {
+        if (object instanceof Thread) {
+            return 500;
+        }
+        return sizeByType.get(object.getClass());
     }
 
     private static boolean isCollectionOrMap(Object object) {
@@ -179,5 +200,24 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         overheadByType.put(TreeMap.class, 40);
         overheadByType.put(LinkedHashMap.class, 40);
         overheadByType.put(ConcurrentHashMap.class, 40);
+
+        sizeByType.put(AtomicBoolean.class, 16);
+        sizeByType.put(AtomicInteger.class, 16);
+        sizeByType.put(AtomicLong.class, 24);
+        sizeByType.put(AtomicReference.class, 24);
+        sizeByType.put(AtomicStampedReference.class, 32);
+        sizeByType.put(AtomicMarkableReference.class, 32);
+
+        sizeByType.put(Date.class, 32);
+        sizeByType.put(java.sql.Date.class, 32);
+        sizeByType.put(java.sql.Timestamp.class, 40);
+        sizeByType.put(LocalDate.class, 32);
+        sizeByType.put(LocalTime.class, 32);
+        sizeByType.put(Instant.class, 32);
+        sizeByType.put(LocalDateTime.class, 96);
+        sizeByType.put(OffsetDateTime.class, 128);
+        sizeByType.put(ZonedDateTime.class, 136);
+        sizeByType.put(Thread.class, 500);
+
     }
 }
