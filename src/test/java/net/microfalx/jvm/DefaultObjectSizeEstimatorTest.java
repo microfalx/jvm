@@ -46,9 +46,10 @@ class DefaultObjectSizeEstimatorTest {
         String value = "hello-world";
 
         long shallow = estimator.getShallowSize(value);
-        long deep = estimator.getDeepSize(value);
+        ObjectSize deep = estimator.getDeepSize(value);
 
-        assertTrue(deep > shallow);
+        assertTrue(deep.getSizeOf() > shallow);
+        assertTrue(deep.getCountOf() > 0);
     }
 
     @Test
@@ -58,9 +59,10 @@ class DefaultObjectSizeEstimatorTest {
         nodes.add(new SampleNode("second"));
 
         long shallow = estimator.getShallowSize(nodes);
-        long deep = estimator.getDeepSize(nodes);
+        ObjectSize deep = estimator.getDeepSize(nodes);
 
-        assertTrue(deep > shallow);
+        assertTrue(deep.getSizeOf() > shallow);
+        assertTrue(deep.getCountOf() > 0);
     }
 
     @Test
@@ -70,9 +72,10 @@ class DefaultObjectSizeEstimatorTest {
         nodes.put("k2", new SampleNode("second"));
 
         long shallow = estimator.getShallowSize(nodes);
-        long deep = estimator.getDeepSize(nodes);
+        ObjectSize deep = estimator.getDeepSize(nodes);
 
-        assertTrue(deep > shallow);
+        assertTrue(deep.getSizeOf() > shallow);
+        assertTrue(deep.getCountOf() > 0);
     }
 
     private static final class SampleNode {

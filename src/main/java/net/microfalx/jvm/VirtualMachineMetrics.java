@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.DoubleSummaryStatistics;
 import java.util.LongSummaryStatistics;
+import java.util.function.Function;
 
 /**
  * A singleton class which collects JVM metrics and stores them in the store.
@@ -63,8 +64,23 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
         return objectSizeEstimator.getShallowSize(object);
     }
 
-    public long getDeepSize(Object object) {
+    public ObjectSize getDeepSize(Object object) {
         return objectSizeEstimator.getDeepSize(object);
+    }
+
+    @Override
+    public void registerShallowSize(Class<?> clazz, int size) {
+        objectSizeEstimator.registerShallowSize(clazz, size);
+    }
+
+    @Override
+    public <T> void registerShallowSize(Class<T> clazz, Function<T, ObjectSize> function) {
+        objectSizeEstimator.registerShallowSize(clazz, function);
+    }
+
+    @Override
+    public void registerShallowSizeOfSubclass(Class<?> clazz, int size) {
+        objectSizeEstimator.registerShallowSizeOfSubclass(clazz, size);
     }
 
     /**
