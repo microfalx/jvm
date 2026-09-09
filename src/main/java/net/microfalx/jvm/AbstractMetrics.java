@@ -1,10 +1,9 @@
 package net.microfalx.jvm;
 
+import net.microfalx.lang.service.Logger;
 import net.microfalx.metrics.Batch;
 import net.microfalx.metrics.SeriesStore;
 import net.microfalx.threadpool.AbstractRunnable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.concurrent.Executors;
@@ -24,7 +23,7 @@ import static net.microfalx.lang.StringUtils.joinNames;
  */
 public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractMetrics.class);
+    private static final Logger LOGGER = Logger.get(AbstractMetrics.class);
 
     private ScheduledExecutorService executor;
     private volatile String name;

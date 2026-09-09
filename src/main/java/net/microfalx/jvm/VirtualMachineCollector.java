@@ -3,9 +3,8 @@ package net.microfalx.jvm;
 import net.microfalx.jvm.model.*;
 import net.microfalx.jvm.model.Process;
 import net.microfalx.lang.StringUtils;
+import net.microfalx.lang.service.Logger;
 import net.microfalx.metrics.Timer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import oshi.SystemInfo;
 import oshi.software.os.OSProcess;
 import oshi.software.os.OperatingSystem;
@@ -21,7 +20,7 @@ import static net.microfalx.lang.ArgumentUtils.requireNonNull;
  */
 public final class VirtualMachineCollector extends AbstractCollector<VirtualMachine> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(VirtualMachineCollector.class);
+    private static final Logger LOGGER = Logger.get(VirtualMachineCollector.class);
 
     private static final String OPERATING_SYSTEM_NAME = "java.lang:type=OperatingSystem";
 

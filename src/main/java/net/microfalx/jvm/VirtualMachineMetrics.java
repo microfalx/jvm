@@ -7,8 +7,6 @@ import net.microfalx.jvm.model.VirtualMachine;
 import net.microfalx.metrics.Batch;
 import net.microfalx.metrics.Metric;
 import net.microfalx.metrics.statistics.TimeWindowStatisticalSummary;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.DoubleSummaryStatistics;
@@ -20,8 +18,6 @@ import java.util.function.Function;
  */
 public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine, VirtualMachineCollector>
         implements ObjectSizeEstimator {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(VirtualMachineMetrics.class);
 
     private static final VirtualMachineMetrics instance = new VirtualMachineMetrics();
     private final VirtualMachineCollector collector = new VirtualMachineCollector(VirtualMachineMBeanServer.local());

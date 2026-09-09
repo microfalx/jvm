@@ -4,9 +4,8 @@ import lombok.Getter;
 import lombok.ToString;
 import net.microfalx.lang.*;
 import net.microfalx.lang.annotation.SizeOf;
+import net.microfalx.lang.service.Logger;
 import net.microfalx.lang.service.Service;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
@@ -24,7 +23,7 @@ import static net.microfalx.lang.ArgumentUtils.requireNonNull;
 
 public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultObjectSizeEstimator.class);
+    private static final Logger LOGGER = Logger.get(DefaultObjectSizeEstimator.class);
 
     private static final int MAX_ITEMS = 1000;
     private static final boolean MEM_32G_OR_GREATER = Runtime.getRuntime().maxMemory() > 32 * FormatterUtils.G;
@@ -269,17 +268,14 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
             }
             if (size == null) {
                 if (!(object instanceof Service) && clazz.getName().startsWith("net.microfalx.")) {
-                    LOGGER.debug("Unknown object type for MicroFalx: {}",
-                            clazz.getName());
+                    LOGGER.debug("Unknown object type for MicroFalx: {}", clazz.getName());
                 } else if (clazz.getName().startsWith("java.")) {
-                    LOGGER.error("Unknown object type for JDK: {}",
-                            clazz.getName());
+                    LOGGER.debug("Unknown object type for JDK: {}", clazz.getName());
                 } else if (clazz.getName().startsWith("org.springframework.")) {
-                    LOGGER.error("Unknown object type for Spring: {}",
-                            clazz.getName());
+                    LOGGER.debug("Unknown object type for Spring: {}", clazz.getName());
                 } else {
                     if (unknownTypes.add(clazz)) {
-                        LOGGER.info("Unknown object type for special size calculation: {}, shallow size: {}",
+                        LOGGER.debug("Unknown object type for special size calculation: {}, shallow size: {}",
                                 clazz.getName(), getShallowSize(object));
                     }
                 }
@@ -289,17 +285,17 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
     }
 
     private void doRegisterShallowSize(Class<?> clazz, int size) {
-        LOGGER.info("*** Registering shallow size {} bytes for class {}", size, ClassUtils.getName(clazz));
+        LOGGER.debug("Registering shallow size {} bytes for class {}", size, ClassUtils.getName(clazz));
         sizeByType.put(clazz, size);
     }
 
     private <T> void doRegisterShallowSize(Class<T> clazz, Function<T, ObjectSize> size) {
-        LOGGER.info("*** Registering shallow size {} function for class {}", ClassUtils.getName(size), ClassUtils.getName(clazz));
+        LOGGER.debug("Registering shallow size {} function for class {}", ClassUtils.getName(size), ClassUtils.getName(clazz));
         sizeByFunction.put(clazz, (Function<Object, ObjectSize>) size);
     }
 
     private void doRegisterShallowSizeOfSubclass(Class<?> clazz, int size) {
-        LOGGER.info("*** Registering shallow size {} bytes for subclass {}", size, ClassUtils.getName(clazz));
+        LOGGER.debug("Registering shallow size {} bytes for subclass {}", size, ClassUtils.getName(clazz));
         subclassByType.put(clazz, size);
     }
 
