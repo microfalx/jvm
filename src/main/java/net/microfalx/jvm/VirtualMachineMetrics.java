@@ -65,7 +65,7 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     }
 
     @Override
-    public void registerShallowSize(Class<?> clazz, int size) {
+    public <T> void registerShallowSize(Class<T> clazz, int size) {
         objectSizeEstimator.registerShallowSize(clazz, size);
     }
 

@@ -6,13 +6,20 @@ import net.microfalx.lang.*;
 import net.microfalx.lang.annotation.SizeOf;
 import net.microfalx.lang.service.Logger;
 import net.microfalx.lang.service.Service;
+import net.microfalx.threadpool.ThreadPool;
 import sun.misc.Unsafe;
 
+import java.lang.ref.Reference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
+import java.security.SecureRandom;
 import java.time.*;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.*;
 import java.util.concurrent.locks.Lock;
 import java.util.function.Function;
@@ -20,6 +27,8 @@ import java.util.function.Function;
 import static java.util.Collections.*;
 import static net.microfalx.lang.ArgumentUtils.requireBounded;
 import static net.microfalx.lang.ArgumentUtils.requireNonNull;
+import static net.microfalx.lang.ExceptionUtils.getRootCauseDescription;
+import static net.microfalx.lang.NumberUtils.addIfPositive;
 
 public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
 
@@ -31,10 +40,11 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
     private final Map<Class<?>, Integer> shallowSizeCache = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Integer> overheadByType = new HashMap<>();
     private static final Map<Class<?>, Integer> sizeByType = new HashMap<>();
-    private static final Map<Class<?>, Function<Object, ObjectSize>> sizeByFunction = new HashMap<>();
-    private static final Map<Class<?>, Integer> subclassByType = new HashMap<>();
+    private static final Map<Class<?>, Function<Object, ObjectSize>> sizeByFunction = new LinkedHashMap<>();
+    private static final Map<Class<?>, Integer> subclassByType = new LinkedHashMap<>();
+    private static final Map<Class<?>, ObjectSize> cachedSizables = new HashMap<>();
     private static final Set<Class<?>> unknownTypes = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private static ObjectSize ZERO = new ObjectSizeImpl();
+    private static final ObjectSize ZERO = new ObjectSizeImpl();
     private static Unsafe unsafe;
 
     @Override
@@ -44,20 +54,11 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
 
     @Override
     public ObjectSize getDeepSize(Object object) {
-        if (object == null) return ZERO;
-        if (object instanceof Sizeable) return new ObjectSizeImpl((Sizeable) object);
-        ObjectSizeImpl objectSize = new ObjectSizeImpl();
-        objectSize.visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        try {
-            objectSize.sizeOf = getDeepSize(object, objectSize);
-        } finally {
-            objectSize.visited = null;
-        }
-        return objectSize;
+        return getDeepSize(object, false);
     }
 
     @Override
-    public void registerShallowSize(Class<?> clazz, int size) {
+    public <T> void registerShallowSize(Class<T> clazz, int size) {
         requireNonNull(clazz);
         requireBounded(size, 1, Integer.MAX_VALUE);
         doRegisterShallowSize(clazz, size);
@@ -77,65 +78,109 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         doRegisterShallowSizeOfSubclass(clazz, size);
     }
 
-    private long getDeepSize(Object object, ObjectSizeImpl objectSize) {
-        if (!objectSize.visit(object)) return getPointerSize();
-        ObjectSize specialSize = getSpecialSize(object);
-        if (specialSize != null) {
-            objectSize.add(specialSize.getCountOf());
-            return specialSize.getSizeOf();
+    private ObjectSize getDeepSize(Object object, boolean skipSizable) {
+        ObjectSizeImpl objectSize = new ObjectSizeImpl(getPointerSize());
+        objectSize.visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        try {
+            return calculateDeepSize(object, objectSize, skipSizable);
+        } catch (Throwable e) {
+            LOGGER.warn("Unable to calculate deep size for object of type {}, root cause: {}",
+                    object.getClass().getName(), getRootCauseDescription(e));
+        } finally {
+            objectSize.visited = null;
         }
-        long size = shallowSizeOf(object);
-        if (isCollectionOrMap(object)) {
-            size += getCollectionOrMapSize(object, objectSize);
-        } else {
-            size += getFieldsSize(object, objectSize);
-        }
-        return size;
+        return objectSize;
     }
 
-    private long getCollectionOrMapSize(Object object, ObjectSizeImpl objectSize) {
-        long sampleSize = 0;
+    private ObjectSize getDeepSize(Object object, ObjectSizeImpl rootObjectSize) {
+        return calculateDeepSize(object, rootObjectSize, false);
+    }
+
+    private ObjectSize calculateDeepSize(Object object, ObjectSizeImpl rootObjectSize, boolean skipSizable) {
+        if (object == null) return ZERO;
+        if (object instanceof String) {
+            return new ObjectSizeImpl(40 + ((String) object).length() * 2);
+        }
+        if (object instanceof Sizeable && !skipSizable) return getSizeFromSizeable((Sizeable) object);
+        if (!rootObjectSize.visit(object)) return ZERO;
+        ObjectSize specialSize = getSpecialSize(object);
+        if (specialSize != null) {
+            rootObjectSize.add(specialSize);
+            return specialSize;
+        } else {
+            rootObjectSize.addSize(shallowSizeOf(object));
+            if (isCollectionOrMap(object)) {
+                return calculateCollectionOrMapSize(object, rootObjectSize);
+            } else {
+                return calculateFieldsSize(object, rootObjectSize);
+            }
+        }
+    }
+
+    private ObjectSize calculateCollectionOrMapSize(Object object, ObjectSizeImpl rootObjectSize) {
+        ObjectSizeImpl estimatedKeySize = new ObjectSizeImpl();
+        ObjectSizeImpl estimatedValueSize = new ObjectSizeImpl();
         long size;
         int entryCount = 0;
         int iterations = MAX_ITEMS;
         if (object instanceof Collection<?>) {
             size = ((Collection<?>) object).size();
-            objectSize.add((int) size);
+            rootObjectSize.addCount((int) size);
             for (Object item : (Collection<?>) object) {
-                sampleSize += getDeepSize(item, objectSize);
+                estimatedValueSize.add(getDeepSize(item, rootObjectSize));
                 entryCount++;
                 if (iterations-- == 0) break;
             }
         } else if (object instanceof Map<?, ?>) {
             size = ((Map<?, ?>) object).size();
-            objectSize.add((int) size);
+            rootObjectSize.addCount((int) size);
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) object).entrySet()) {
-                sampleSize += getDeepSize(entry.getKey(), objectSize);
-                sampleSize += getDeepSize(entry.getValue(), objectSize);
+                estimatedKeySize.add(getDeepSize(entry.getKey(), rootObjectSize));
+                estimatedValueSize.add(getDeepSize(entry.getValue(), rootObjectSize));
                 entryCount++;
                 if (iterations-- == 0) break;
             }
+            estimatedValueSize = new ObjectSizeImpl(estimatedKeySize.getSizeOf() + estimatedValueSize.getSizeOf(),
+                    estimatedValueSize.getCountOf(),
+                    estimatedKeySize.getArraySizeOf() + estimatedValueSize.getArraySizeOf(),
+                    estimatedKeySize.getArrayCountOf() + estimatedValueSize.getArrayCountOf());
         } else {
             size = 0;
         }
-        int averageSize = 0;
-        // calculate average / entry
-        if (entryCount > 0) averageSize = (int) (sampleSize / entryCount);
-        // using all entries, calculate the total estimated size
-        long totalSize = size * averageSize;
-        int overheadPerEntry = overheadByType.getOrDefault(object.getClass(), 16);
-        // add overhead per entry to the total size
-        return totalSize + overheadPerEntry * size;
+        estimatedValueSize = new ObjectSizeImpl(
+                estimateSizeBasedOnSample(size, estimatedValueSize.getSizeOf(), entryCount),
+                estimateCountBasedOnSample(size, estimatedValueSize.getCountOf(), entryCount),
+                estimateSizeBasedOnSample(size, estimatedValueSize.getArraySizeOf(), entryCount),
+                estimateCountBasedOnSample(size, estimatedValueSize.getArrayCountOf(), entryCount)
+        );
+        rootObjectSize.add(estimatedValueSize);
+        return estimatedValueSize;
     }
 
-    private long getFieldsSize(Object object, ObjectSizeImpl objectSize) {
-        long size = 0;
+    private long estimateSizeBasedOnSample(long size, long entySize, int entryCount) {
+        int averageSize = 0;
+        // calculate average / entry
+        if (entryCount > 0) averageSize = (int) (entySize / entryCount);
+        // using all entries, calculate the total estimated size
+        return size * averageSize;
+    }
+
+    private int estimateCountBasedOnSample(long size, int entySize, int entryCount) {
+        int averageCount = 0;
+        // calculate average / entry
+        if (entryCount > 0) averageCount = (int) (entySize / entryCount);
+        // using all entries, calculate the total estimated size
+        return (int) (size * averageCount);
+    }
+
+    private ObjectSize calculateFieldsSize(Object object, ObjectSizeImpl rootObjectSize) {
+        ObjectSizeImpl objectSize = new ObjectSizeImpl(getPointerSize());
         List<Field> fields = ReflectionUtils.openFields(object.getClass());
         for (Field field : fields) {
             SizeOf sizeOfAnnot = field.getAnnotation(SizeOf.class);
             if (sizeOfAnnot != null) {
                 if (!sizeOfAnnot.shallow() && sizeOfAnnot.deepSize() > 0) {
-                    size += sizeOfAnnot.deepSize();
+                    objectSize.addSize(sizeOfAnnot.deepSize());
                 }
                 continue;
             }
@@ -143,14 +188,23 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
             try {
                 Object fieldValue = field.get(object);
                 if (fieldValue != null) {
-                    objectSize.increment();
-                    size += getDeepSize(fieldValue, objectSize);
+                    objectSize.incrementCount();
+                    objectSize.add(getDeepSize(fieldValue, rootObjectSize));
                 }
-            } catch (IllegalAccessException e) {
-                // Ignore inaccessible fields
+            } catch (Throwable e) {
+                if (e instanceof IllegalAccessException) {
+                    LOGGER.warn("Unable to calculate field size {} for field {}, root cause: {}",
+                            field, object.getClass().getName(), getRootCauseDescription(e));
+                }
+                if (!ExceptionUtils.contains(e, IllegalAccessException.class, IllegalAccessError.class,
+                        NoClassDefFoundError.class, ClassNotFoundException.class)) {
+                    LOGGER.warn("Unable to calculate field size {} for field {}, root cause: {}",
+                            field, object.getClass().getName(), getRootCauseDescription(e));
+                }
             }
         }
-        return size;
+        rootObjectSize.add(objectSize);
+        return objectSize;
     }
 
     private int shallowSizeOf(Object obj) {
@@ -246,9 +300,7 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
     private ObjectSize getSpecialSize(Object object) {
         if (object == null) return new ObjectSizeImpl(getPointerSize());
         Class<?> clazz = object.getClass();
-        if (object instanceof String) {
-            return new ObjectSizeImpl(40 + ((String) object).length() * 2);
-        } else if (clazz.isArray()) {
+        if (clazz.isArray()) {
             int length = java.lang.reflect.Array.getLength(object);
             if (clazz.getComponentType().isPrimitive()) {
                 length = length * getFieldSize(clazz.getComponentType());
@@ -256,9 +308,12 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
                 length = length * getPointerSize();
             }
             return new ObjectSizeImpl(length);
+        } else if (Proxy.isProxyClass(clazz)) {
+            // proxies probably hold references to other objects, so we will calculate the shallow size only
+            return new ObjectSizeImpl(getShallowSize(object));
         } else {
             Integer size = sizeByType.get(clazz);
-            if (size == null) {
+            if (size == null && !isCollectionOrMap(object)) {
                 size = getSubclassSize(object);
                 if (size == null) size = getSizeFromAnnotation(object);
                 if (size == null) {
@@ -272,7 +327,7 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
                 } else if (clazz.getName().startsWith("java.")) {
                     LOGGER.debug("Unknown object type for JDK: {}", clazz.getName());
                 } else if (clazz.getName().startsWith("org.springframework.")) {
-                    LOGGER.debug("Unknown object type for Spring: {}", clazz.getName());
+                    LOGGER.info("Unknown object type for Spring: {}", clazz.getName());
                 } else {
                     if (unknownTypes.add(clazz)) {
                         LOGGER.debug("Unknown object type for special size calculation: {}, shallow size: {}",
@@ -282,6 +337,27 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
             }
             return size != null ? new ObjectSizeImpl(size) : null;
         }
+    }
+
+    private ObjectSize getSizeFromSizeable(Sizeable sizeable) {
+        ObjectSizeImpl objectSize = new ObjectSizeImpl(sizeable);
+        if (objectSize.sizeOf < 0) {
+            ObjectSize cachedSize = cachedSizables.get(sizeable.getClass());
+            if (cachedSize == null) {
+                cachedSize = getDeepSize(sizeable, true);
+                // the cached size eliminates the space occupied by the array, since it is already accounted
+                // for in the sizeable object
+                cachedSize = new ObjectSizeImpl(cachedSize.getSizeOf() - objectSize.getArraySizeOf(),
+                        cachedSize.getCountOf(),
+                        -1, -1);
+                cachedSizables.put(sizeable.getClass(), cachedSize);
+            }
+            // add the arrays size to the cached size, since it is not accounted for in the sizeable object
+            objectSize = new ObjectSizeImpl(cachedSize.getSizeOf() + objectSize.getArraySizeOf(),
+                    cachedSize.getCountOf(),
+                    objectSize.getArraySizeOf(), objectSize.getArrayCountOf());
+        }
+        return objectSize;
     }
 
     private void doRegisterShallowSize(Class<?> clazz, int size) {
@@ -330,6 +406,8 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
 
         private long sizeOf;
         private int countOf;
+        private long arraySizeOf;
+        private int arrayCountOf;
         private Set<Object> visited;
 
         ObjectSizeImpl() {
@@ -337,25 +415,40 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
 
         ObjectSizeImpl(long sizeOf) {
             this.sizeOf = sizeOf;
-            this.countOf++;
+            this.countOf = 1;
         }
 
-        ObjectSizeImpl(long sizeOf, int countOf) {
+        ObjectSizeImpl(long sizeOf, int countOf, long arraySizeOf, int arrayCountOf) {
             this.sizeOf = sizeOf;
             this.countOf = countOf;
+            this.arraySizeOf = arraySizeOf;
+            this.arrayCountOf = arrayCountOf;
         }
 
         ObjectSizeImpl(Sizeable sizeable) {
             this.sizeOf = sizeable.getSizeOf();
             this.countOf = sizeable.getCountOf();
+            this.arraySizeOf = sizeable.getArraySizeOf();
+            this.arrayCountOf = sizeable.getArrayCountOf();
         }
 
-        private void increment() {
+        private void addSize(long size) {
+            this.sizeOf += size;
+        }
+
+        private void incrementCount() {
             this.countOf++;
         }
 
-        private void add(int count) {
+        private void addCount(int count) {
             this.countOf += count;
+        }
+
+        private void add(ObjectSize size) {
+            this.sizeOf = addIfPositive(this.sizeOf, size.getSizeOf());
+            this.countOf = addIfPositive(this.countOf, size.getCountOf());
+            this.arraySizeOf = addIfPositive(this.arraySizeOf, size.getArraySizeOf());
+            this.arrayCountOf = addIfPositive(this.arrayCountOf, size.getArrayCountOf());
         }
 
         private boolean visit(Object object) {
@@ -403,21 +496,6 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         sizeByType.put(AtomicStampedReference.class, 32);
         sizeByType.put(AtomicMarkableReference.class, 32);
 
-        sizeByType.put(ArrayList.class, 32);
-        sizeByType.put(LinkedList.class, 32);
-        sizeByType.put(HashSet.class, 40);
-        sizeByType.put(TreeSet.class, 40);
-        sizeByType.put(HashMap.class, 40);
-        sizeByType.put(TreeMap.class, 40);
-        sizeByType.put(LinkedHashSet.class, 40);
-        sizeByType.put(LinkedHashMap.class, 40);
-        sizeByType.put(ConcurrentHashMap.class, 80);
-        sizeByType.put(ConcurrentLinkedQueue.class, 80);
-        sizeByType.put(ArrayBlockingQueue.class, 80);
-        sizeByType.put(LinkedBlockingQueue.class, 80);
-        sizeByType.put(CopyOnWriteArrayList.class, 40);
-        sizeByType.put(CopyOnWriteArraySet.class, 60);
-
         sizeByType.put(Date.class, 32);
         sizeByType.put(java.sql.Date.class, 32);
         sizeByType.put(java.sql.Timestamp.class, 40);
@@ -430,8 +508,18 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         sizeByType.put(ZonedDateTime.class, 136);
         sizeByType.put(Thread.class, 500);
 
+        sizeByType.put(SecureRandom.class, 40);
+        sizeByType.put(ThreadLocalRandom.class, 24);
+
         subclassByType.put(Thread.class, 500);
         subclassByType.put(Lock.class, 100);
-        subclassByType.put(ExecutorService.class, 500);
+        // very small because it is shared
+        subclassByType.put(ThreadPool.class, 8);
+        // very small because it is shared
+        subclassByType.put(ExecutorService.class, 8);
+        subclassByType.put(Reference.class, 40);
+        subclassByType.put(Enum.class, 24);
+        subclassByType.put(EnumSet.class, 40);
+        subclassByType.put(org.slf4j.Logger.class, 64);
     }
 }

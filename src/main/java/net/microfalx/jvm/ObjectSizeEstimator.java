@@ -40,7 +40,7 @@ public interface ObjectSizeEstimator {
      * @param clazz the class
      * @param size  the size
      */
-    void registerShallowSize(Class<?> clazz, int size);
+    <T> void registerShallowSize(Class<T> clazz, int size);
 
     /**
      * Registers a shallow size for a given class and no deep size will be calculated.

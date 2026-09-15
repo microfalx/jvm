@@ -21,7 +21,7 @@ class DefaultObjectSizeEstimatorTest {
 
     @Test
     void deepSizeReturnsZeroForNull() {
-        assertEquals(0, estimator.getDeepSize(null));
+        assertEquals(0, estimator.getDeepSize(null).getSizeOf());
     }
 
     @Test
@@ -70,6 +70,8 @@ class DefaultObjectSizeEstimatorTest {
         Map<String, SampleNode> nodes = new HashMap<>();
         nodes.put("k1", new SampleNode("first"));
         nodes.put("k2", new SampleNode("second"));
+        nodes.put("k3", new SampleNode("third"));
+        nodes.put("k4", new SampleNode("fourth"));
 
         long shallow = estimator.getShallowSize(nodes);
         ObjectSize deep = estimator.getDeepSize(nodes);

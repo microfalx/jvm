@@ -26,6 +26,6 @@ public interface ObjectSize extends Sizeable {
      * @return a non-null instance
      */
     static ObjectSize of(long size, int count) {
-        return new DefaultObjectSizeEstimator.ObjectSizeImpl(size, count);
+        return new DefaultObjectSizeEstimator.ObjectSizeImpl(size, count, -1, -1);
     }
 }
