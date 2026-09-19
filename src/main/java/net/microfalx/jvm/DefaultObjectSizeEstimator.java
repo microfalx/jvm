@@ -147,8 +147,9 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         } else {
             size = 0;
         }
+        int overhead = entryCount * overheadByType.getOrDefault(object.getClass(), 0);
         estimatedValueSize = new ObjectSizeImpl(
-                estimateSizeBasedOnSample(size, estimatedValueSize.getSizeOf(), entryCount),
+                estimateSizeBasedOnSample(size, estimatedValueSize.getSizeOf(), entryCount) + overhead,
                 estimateCountBasedOnSample(size, estimatedValueSize.getCountOf(), entryCount),
                 estimateSizeBasedOnSample(size, estimatedValueSize.getArraySizeOf(), entryCount),
                 estimateCountBasedOnSample(size, estimatedValueSize.getArrayCountOf(), entryCount)
