@@ -9,6 +9,7 @@ import net.microfalx.lang.service.Service;
 import net.microfalx.threadpool.ThreadPool;
 import sun.misc.Unsafe;
 
+import java.io.File;
 import java.lang.ref.Reference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -511,6 +512,7 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         sizeByType.put(OffsetDateTime.class, 128);
         sizeByType.put(ZonedDateTime.class, 136);
         sizeByType.put(Thread.class, 500);
+        sizeByType.put(File.class, 100);
 
         sizeByType.put(SecureRandom.class, 40);
         sizeByType.put(ThreadLocalRandom.class, 24);
