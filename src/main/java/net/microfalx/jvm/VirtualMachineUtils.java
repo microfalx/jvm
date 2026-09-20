@@ -9,6 +9,7 @@ public class VirtualMachineUtils {
     public final static Metrics JVM_METRICS = Metrics.of("JVM");
     public final static Metrics COLLECTOR_METRICS = JVM_METRICS.withGroup("Collector");
     public final static Metrics METRICS_METRICS = JVM_METRICS.withGroup("Metrics");
+    public final static Metrics OBJECT_SIZE_METRICS = JVM_METRICS.withGroup("Object Size");
 
     /**
      * Calculate the usage time in percent based on uptime and actual usage.

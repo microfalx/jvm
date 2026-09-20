@@ -25,6 +25,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.function.Function;
 
 import static java.util.Collections.*;
+import static net.microfalx.jvm.VirtualMachineUtils.OBJECT_SIZE_METRICS;
 import static net.microfalx.lang.ArgumentUtils.requireBounded;
 import static net.microfalx.lang.ArgumentUtils.requireNonNull;
 import static net.microfalx.lang.ExceptionUtils.getRootCauseDescription;
@@ -108,11 +109,13 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
             rootObjectSize.add(specialSize);
             return specialSize;
         } else {
+
             rootObjectSize.addSize(shallowSizeOf(object));
             if (isCollectionOrMap(object)) {
                 return calculateCollectionOrMapSize(object, rootObjectSize);
             } else {
-                return calculateFieldsSize(object, rootObjectSize);
+                return OBJECT_SIZE_METRICS.time(ClassUtils.getCompactName(object),
+                        () -> calculateFieldsSize(object, rootObjectSize));
             }
         }
     }
