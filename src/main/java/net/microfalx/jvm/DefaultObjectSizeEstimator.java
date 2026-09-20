@@ -10,17 +10,16 @@ import net.microfalx.threadpool.ThreadPool;
 import sun.misc.Unsafe;
 
 import java.io.File;
+import java.lang.annotation.Annotation;
 import java.lang.ref.Reference;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.security.SecureRandom;
 import java.time.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.concurrent.locks.Lock;
 import java.util.function.Function;
@@ -42,12 +41,18 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
     private final Map<Class<?>, Integer> shallowSizeCache = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Integer> overheadByType = new HashMap<>();
     private static final Map<Class<?>, Integer> sizeByType = new HashMap<>();
-    private static final Map<Class<?>, Function<Object, ObjectSize>> sizeByFunction = new LinkedHashMap<>();
+    private static final Map<Class<? extends Annotation>, Integer> sizeByAnnotationType = new HashMap<>();
+    private static final Map<Class<?>, Function<Object, ObjectSize>> sizeByFunctionType = new ConcurrentHashMap<>();
+    private static final Collection<Function<Object, ObjectSize>> sizeByFunction = new CopyOnWriteArrayList<>();
     private static final Map<Class<?>, Integer> subclassByType = new LinkedHashMap<>();
     private static final Map<Class<?>, ObjectSize> cachedSizables = new HashMap<>();
     private static final Set<Class<?>> unknownTypes = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private static final Set<Class<?>> failedTypes = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private static final ObjectSize ZERO = new ObjectSizeImpl();
     private static Unsafe unsafe;
+
+    static ThreadLocal<Object> TOP = new ThreadLocal<>();
+    static ThreadLocal<Object> CURRENT = new ThreadLocal<>();
 
     @Override
     public long getShallowSize(Object object) {
@@ -55,8 +60,18 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
     }
 
     @Override
+    public long getShallowSize(Class<?> type) {
+        return shallowSizeOf(type, null);
+    }
+
+    @Override
     public ObjectSize getDeepSize(Object object) {
-        return getDeepSize(object, false);
+        TOP.set(object);
+        try {
+            return getDeepSize(object, false);
+        } finally {
+            TOP.remove();
+        }
     }
 
     @Override
@@ -74,6 +89,12 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
     }
 
     @Override
+    public <T> void registerShallowSize(Function<T, ObjectSize> function) {
+        requireNonNull(function);
+        doRegisterShallowSize(function);
+    }
+
+    @Override
     public void registerShallowSizeOfSubclass(Class<?> clazz, int size) {
         requireNonNull(clazz);
         requireBounded(size, 1, Integer.MAX_VALUE);
@@ -83,12 +104,16 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
     private ObjectSize getDeepSize(Object object, boolean skipSizable) {
         ObjectSizeImpl objectSize = new ObjectSizeImpl(getPointerSize());
         objectSize.visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        CURRENT.set(object);
         try {
             return calculateDeepSize(object, objectSize, skipSizable);
         } catch (Throwable e) {
-            LOGGER.warn("Unable to calculate deep size for object of type {}, root cause: {}",
-                    object.getClass().getName(), getRootCauseDescription(e));
+            if (failedTypes.add(object.getClass())) {
+                LOGGER.warn("Unable to calculate deep size for object of type {}, root cause: {}",
+                        ClassUtils.getName(object), getRootCauseDescription(e));
+            }
         } finally {
+            CURRENT.remove();
             objectSize.visited = null;
         }
         return objectSize;
@@ -110,7 +135,6 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
             rootObjectSize.add(specialSize);
             return specialSize;
         } else {
-
             rootObjectSize.addSize(shallowSizeOf(object));
             if (isCollectionOrMap(object)) {
                 return calculateCollectionOrMapSize(object, rootObjectSize);
@@ -197,14 +221,11 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
                     objectSize.add(getDeepSize(fieldValue, rootObjectSize));
                 }
             } catch (Throwable e) {
-                if (e instanceof IllegalAccessException) {
-                    LOGGER.warn("Unable to calculate field size {} for field {}, root cause: {}",
-                            field, object.getClass().getName(), getRootCauseDescription(e));
-                }
                 if (!ExceptionUtils.contains(e, IllegalAccessException.class, IllegalAccessError.class,
-                        NoClassDefFoundError.class, ClassNotFoundException.class)) {
+                        NoClassDefFoundError.class, ClassNotFoundException.class)
+                        && failedTypes.add(field.getType())) {
                     LOGGER.warn("Unable to calculate field size {} for field {}, root cause: {}",
-                            field, object.getClass().getName(), getRootCauseDescription(e));
+                            field, ClassUtils.getName(object), getRootCauseDescription(e));
                 }
             }
         }
@@ -214,14 +235,17 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
 
     private int shallowSizeOf(Object obj) {
         if (obj == null) return 0;
-        Class<?> clazz = obj.getClass();
+        return shallowSizeOf(obj.getClass(), obj);
+    }
+
+    private int shallowSizeOf(Class<?> clazz, Object obj) {
         Integer size = shallowSizeCache.get(clazz);
         if (size != null) return size;
         // Handle arrays separately
         if (clazz.isArray()) {
             int baseOffset = unsafe.arrayBaseOffset(clazz);
             int indexScale = unsafe.arrayIndexScale(clazz);
-            int length = java.lang.reflect.Array.getLength(obj);
+            int length = obj != null ? java.lang.reflect.Array.getLength(obj) : 0;
             return scaleToAlignment(baseOffset + (length * indexScale));
         } else {
             int maxOffset = getOffsetLastField(clazz);
@@ -233,7 +257,7 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
             // Round up to the JVM's 8-byte alignment barrier
             size = scaleToAlignment(maxOffset);
         }
-        shallowSizeCache.put(obj.getClass(), size);
+        shallowSizeCache.put(clazz, size);
         return size;
     }
 
@@ -275,9 +299,23 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         return size;
     }
 
+    private Integer getSizeByAnnotation(Object object) {
+        Integer size = null;
+        for (Map.Entry<Class<? extends Annotation>, Integer> entry : sizeByAnnotationType.entrySet()) {
+            Class<? extends Annotation> annotationClass = entry.getKey();
+            Annotation annotation = object.getClass().getAnnotation(annotationClass);
+            if (annotation != null) {
+                size = entry.getValue();
+                doRegisterShallowSize(object.getClass(), size);
+                break;
+            }
+        }
+        return size;
+    }
+
     private ObjectSize getSizeFromFunction(Object object) {
         ObjectSize size = null;
-        for (Map.Entry<Class<?>, Function<Object, ObjectSize>> entry : sizeByFunction.entrySet()) {
+        for (Map.Entry<Class<?>, Function<Object, ObjectSize>> entry : sizeByFunctionType.entrySet()) {
             Class<?> subClass = entry.getKey();
             if (ClassUtils.isSubClassOf(object, subClass)) {
                 Function<Object, ObjectSize> function = entry.getValue();
@@ -285,12 +323,18 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
                 break;
             }
         }
+        if (size == null) {
+            for (Function<Object, ObjectSize> function : sizeByFunction) {
+                size = function.apply(object);
+                if (size != null) break;
+            }
+        }
         return size;
     }
 
     private Integer getSizeFromAnnotation(Object object) {
         Integer size = null;
-        SizeOf sizeOfAnnot = AnnotationUtils.getAnnotation(object, SizeOf.class);
+        SizeOf sizeOfAnnot = object.getClass().getAnnotation(SizeOf.class);
         if (sizeOfAnnot != null) {
             if (sizeOfAnnot.shallow()) {
                 size = (int) getShallowSize(object);
@@ -314,13 +358,15 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
             }
             return new ObjectSizeImpl(length);
         } else if (Proxy.isProxyClass(clazz)) {
+            InvocationHandler invocationHandler = Proxy.getInvocationHandler(object);
             // proxies probably hold references to other objects, so we will calculate the shallow size only
-            return new ObjectSizeImpl(getShallowSize(object));
+            return new ObjectSizeImpl(getShallowSize(invocationHandler));
         } else {
             Integer size = sizeByType.get(clazz);
             if (size == null && !isCollectionOrMap(object)) {
                 size = getSubclassSize(object);
                 if (size == null) size = getSizeFromAnnotation(object);
+                if (size == null) size = getSizeByAnnotation(object);
                 if (size == null) {
                     ObjectSize objectSize = getSizeFromFunction(object);
                     if (objectSize != null) return objectSize;
@@ -331,8 +377,6 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
                     LOGGER.debug("Unknown object type for MicroFalx: {}", clazz.getName());
                 } else if (clazz.getName().startsWith("java.")) {
                     LOGGER.debug("Unknown object type for JDK: {}", clazz.getName());
-                } else if (clazz.getName().startsWith("org.springframework.")) {
-                    LOGGER.info("Unknown object type for Spring: {}", clazz.getName());
                 } else {
                     if (unknownTypes.add(clazz)) {
                         LOGGER.debug("Unknown object type for special size calculation: {}, shallow size: {}",
@@ -365,18 +409,31 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         return objectSize;
     }
 
+    @SuppressWarnings("unchecked")
     private void doRegisterShallowSize(Class<?> clazz, int size) {
-        LOGGER.debug("Registering shallow size {} bytes for class {}", size, ClassUtils.getName(clazz));
-        sizeByType.put(clazz, size);
+        if (ClassUtils.isSubClassOf(clazz, Annotation.class)) {
+            LOGGER.debug("Registering shallow size {} for classes annotated with {}", size, ClassUtils.getName(clazz));
+            sizeByAnnotationType.put((Class<Annotation>) clazz, size);
+        } else {
+            LOGGER.debug("Registering shallow size {} for class {}", size, ClassUtils.getName(clazz));
+            sizeByType.put(clazz, size);
+        }
     }
 
+    @SuppressWarnings("unchecked")
     private <T> void doRegisterShallowSize(Class<T> clazz, Function<T, ObjectSize> size) {
         LOGGER.debug("Registering shallow size {} function for class {}", ClassUtils.getName(size), ClassUtils.getName(clazz));
-        sizeByFunction.put(clazz, (Function<Object, ObjectSize>) size);
+        sizeByFunctionType.put(clazz, (Function<Object, ObjectSize>) size);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> void doRegisterShallowSize(Function<T, ObjectSize> size) {
+        LOGGER.debug("Registering shallow size {} function", ClassUtils.getName(size));
+        sizeByFunction.add((Function<Object, ObjectSize>) size);
     }
 
     private void doRegisterShallowSizeOfSubclass(Class<?> clazz, int size) {
-        LOGGER.debug("Registering shallow size {} bytes for subclass {}", size, ClassUtils.getName(clazz));
+        LOGGER.debug("Registering shallow size {} for subclass {}", size, ClassUtils.getName(clazz));
         subclassByType.put(clazz, size);
     }
 

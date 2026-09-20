@@ -60,6 +60,11 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
         return objectSizeEstimator.getShallowSize(object);
     }
 
+    @Override
+    public long getShallowSize(Class<?> type) {
+        return objectSizeEstimator.getShallowSize(type);
+    }
+
     public ObjectSize getDeepSize(Object object) {
         return objectSizeEstimator.getDeepSize(object);
     }
@@ -67,6 +72,11 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     @Override
     public <T> void registerShallowSize(Class<T> clazz, int size) {
         objectSizeEstimator.registerShallowSize(clazz, size);
+    }
+
+    @Override
+    public <T> void registerShallowSize(Function<T, ObjectSize> function) {
+        objectSizeEstimator.registerShallowSize(function);
     }
 
     @Override
