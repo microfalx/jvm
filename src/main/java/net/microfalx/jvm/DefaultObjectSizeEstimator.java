@@ -4,9 +4,8 @@ import lombok.Getter;
 import lombok.ToString;
 import net.microfalx.lang.*;
 import net.microfalx.lang.annotation.SizeOf;
-import net.microfalx.lang.service.Logger;
-import net.microfalx.lang.service.Service;
 import net.microfalx.threadpool.ThreadPool;
+import org.slf4j.LoggerFactory;
 import sun.misc.Unsafe;
 
 import java.io.File;
@@ -33,7 +32,7 @@ import static net.microfalx.lang.NumberUtils.addIfPositive;
 
 public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
 
-    private static final Logger LOGGER = Logger.get(DefaultObjectSizeEstimator.class);
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(DefaultObjectSizeEstimator.class);
 
     private static final int MAX_ITEMS = 1000;
     private static final boolean MEM_32G_OR_GREATER = Runtime.getRuntime().maxMemory() > 32 * FormatterUtils.G;
@@ -373,15 +372,9 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
                 }
             }
             if (size == null) {
-                if (!(object instanceof Service) && clazz.getName().startsWith("net.microfalx.")) {
-                    LOGGER.debug("Unknown object type for MicroFalx: {}", clazz.getName());
-                } else if (clazz.getName().startsWith("java.")) {
-                    LOGGER.debug("Unknown object type for JDK: {}", clazz.getName());
-                } else {
-                    if (unknownTypes.add(clazz)) {
-                        LOGGER.debug("Unknown object type for special size calculation: {}, shallow size: {}",
-                                clazz.getName(), getShallowSize(object));
-                    }
+                if (unknownTypes.add(clazz)) {
+                    LOGGER.debug("Unknown object type for special size calculation: {}, shallow size: {}",
+                            clazz.getName(), getShallowSize(object));
                 }
             }
             return size != null ? new ObjectSizeImpl(size) : null;
