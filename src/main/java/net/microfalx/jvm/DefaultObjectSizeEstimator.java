@@ -8,6 +8,7 @@ import net.microfalx.threadpool.ThreadPool;
 import org.slf4j.LoggerFactory;
 import sun.misc.Unsafe;
 
+import javax.sql.DataSource;
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.ref.Reference;
@@ -568,6 +569,7 @@ public class DefaultObjectSizeEstimator implements ObjectSizeEstimator {
         sizeByType.put(ThreadLocalRandom.class, 24);
 
         subclassByType.put(Thread.class, 500);
+        subclassByType.put(DataSource.class, 5000);
         subclassByType.put(Lock.class, 100);
         // very small because it is shared
         subclassByType.put(ThreadPool.class, 8);
