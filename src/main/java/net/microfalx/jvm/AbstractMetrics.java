@@ -34,6 +34,7 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
     private volatile Future<?> scrapeTask;
     private volatile Duration averageInterval = Duration.ofMinutes(5);
     private volatile SeriesStore seriesStore;
+    private volatile long lastCollectionTime = 0;
 
     protected final Object lock = new Object();
 
@@ -143,6 +144,15 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
     }
 
     /**
+     * Returns the last collection time.
+     *
+     * @return the last collection time in milliseconds
+     */
+    public long getLastCollectionTime() {
+        return lastCollectionTime;
+    }
+
+    /**
      * Starts data collection.
      */
     public synchronized void start() {
@@ -160,9 +170,11 @@ public abstract class AbstractMetrics<M, C extends AbstractCollector<M>> {
      */
     public void scrape() {
         if (seriesStore == null) initialize();
+        long collectionTime = currentTimeMillis();
         Batch batch = Batch.create(currentTimeMillis());
         METRICS_METRICS.time("Scrape " + getMetricsName(), t -> collectMetrics(batch));
         METRICS_METRICS.time("Store " + getMetricsName(), t -> getStore().add(batch));
+        lastCollectionTime = lastCollectionTime;
     }
 
     /**

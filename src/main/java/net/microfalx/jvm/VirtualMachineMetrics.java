@@ -32,7 +32,11 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     private final TimeWindowStatisticalSummary cpuSystemSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
 
     private final TimeWindowStatisticalSummary gcEdenDurationSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private volatile int lastGcEdenCount = 0;
+    private volatile long lastGcEdenDuration = 0;
     private final TimeWindowStatisticalSummary gcTenuredDurationSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private volatile int lastGcTenuredCount = 0;
+    private volatile long lastGcTenuredDuration = 0;
 
     private final TimeWindowStatisticalSummary ioReadBytesSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
     private final TimeWindowStatisticalSummary ioWriteBytesSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
@@ -390,14 +394,24 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
 
     private void collectGc(VirtualMachine vm, Batch batch) {
         GarbageCollection eden = vm.getGarbageCollection(GarbageCollection.Type.EDEN);
-        batch.add(GC_EDEN_COUNT, eden.getCount());
-        batch.add(GC_EDEN_DURATION, eden.getDuration());
-        GarbageCollection tenured = vm.getGarbageCollection(GarbageCollection.Type.TENURED);
-        batch.add(GC_TENURED_COUNT, tenured.getCount());
-        batch.add(GC_TENURED_DURATION, tenured.getDuration());
+        int edenCount = eden.getCount() - lastGcEdenCount;
+        long edenDuration = eden.getDuration() - lastGcEdenDuration;
+        batch.add(GC_EDEN_COUNT, edenCount);
+        batch.add(GC_EDEN_DURATION, edenDuration);
+        gcEdenDurationSummary.add(edenDuration);
 
-        gcEdenDurationSummary.add(eden.getDuration());
-        gcTenuredDurationSummary.add(tenured.getDuration());
+        GarbageCollection tenured = vm.getGarbageCollection(GarbageCollection.Type.TENURED);
+        int tenuredCount = tenured.getCount() - lastGcTenuredCount;
+        long tenuredDuration = tenured.getDuration() - lastGcTenuredDuration;
+        batch.add(GC_TENURED_COUNT, tenuredCount);
+        batch.add(GC_TENURED_DURATION, tenuredDuration);
+        gcTenuredDurationSummary.add(tenuredDuration);
+
+        // store the current values for the next scrape
+        lastGcEdenCount = eden.getCount();
+        lastGcTenuredCount = tenured.getCount();
+        lastGcEdenDuration = eden.getDuration();
+        lastGcTenuredDuration = tenured.getDuration();
     }
 
     private void collectIo(VirtualMachine vm, Batch batch) {
