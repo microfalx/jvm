@@ -24,6 +24,8 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
 
     private volatile VirtualMachine last = new VirtualMachine();
 
+    private final TimeWindowStatisticalSummary memoryHeapSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
+    private final TimeWindowStatisticalSummary memoryNonHeapSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
     private final TimeWindowStatisticalSummary memoryEdenSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
     private final TimeWindowStatisticalSummary memoryTenuredSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
     private final TimeWindowStatisticalSummary memoryMetaspaceSummary = new TimeWindowStatisticalSummary(getScrapeInterval());
@@ -101,6 +103,30 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     public float getAverageCpuSinceStartup() {
         synchronized (lock) {
             return (float) cpuStatistics.getAverage();
+        }
+    }
+
+    /**
+     * Returns the average heap memory used over the last monitoring interval.
+     *
+     * @return average bytes used
+     * @see #getAverageInterval()
+     */
+    public long getAverageHeapMemory() {
+        synchronized (lock) {
+            return (long) memoryHeapSummary.getMean();
+        }
+    }
+
+    /**
+     * Returns the average non-heap memory used over the last monitoring interval.
+     *
+     * @return average bytes used
+     * @see #getAverageInterval()
+     */
+    public long getAverageNonHeapMemory() {
+        synchronized (lock) {
+            return (long) memoryNonHeapSummary.getMean();
         }
     }
 
@@ -337,6 +363,8 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
     @Override
     protected void updateThresholds() {
         super.updateThresholds();
+        memoryHeapSummary.setInterval(getAverageInterval());
+        memoryNonHeapSummary.setInterval(getAverageInterval());
         memoryEdenSummary.setInterval(getAverageInterval());
         memoryTenuredSummary.setInterval(getAverageInterval());
         memoryMetaspaceSummary.setInterval(getAverageInterval());
@@ -360,6 +388,8 @@ public final class VirtualMachineMetrics extends AbstractMetrics<VirtualMachine,
         batch.add(MEMORY_TENURED_MAX, vm.getTenuredMemoryPool().getMaximum());
         batch.add(MEMORY_TENURED_USED, vm.getTenuredMemoryPool().getUsed());
 
+        memoryHeapSummary.add(vm.getHeapUsedMemory());
+        memoryNonHeapSummary.add(vm.getNonHeapTotalMemory());
         memoryEdenSummary.add(vm.getEdenMemoryPool().getUsed());
         memoryTenuredSummary.add(vm.getTenuredMemoryPool().getUsed());
         memoryMetaspaceSummary.add(vm.getMetapaceMemoryPool().getUsed());
