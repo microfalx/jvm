@@ -69,7 +69,7 @@ public class ProcessLauncher implements Identifiable<String>, Nameable {
 
     ProcessLauncher(File executable) {
         requireNonNull(executable);
-        this.executable = executable;
+        this.executable = JvmUtils.getExecutable(executable);
         this.id = toIdentifier(executable.getName());
         this.name = capitalizeFirst(executable.getName());
     }
